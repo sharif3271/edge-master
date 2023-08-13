@@ -1,13 +1,33 @@
-export abstract class RoutesContainerBase {
-  registeredRoutes: IRegisteredRoute[] = [];
-  defaultRoute!: RouteHandlerBase;
-  route(matcher: Utils.IMatcher, routeHandler: RouteHandlerBase) {
+
+export class RoutesContainer {
+
+  registeredRoutes: RegisteredRoute[] = [];
+  defaultRoute!: IRouteHandler;
+
+  route(matcher: IMatcher, routeHandler: IRouteHandler) {
     this.registeredRoutes.push({ matcher, routeHandler });
     return this;
   }
-  default(routeHandler: RouteHandlerBase) {
+  default(routeHandler: IRouteHandler) {
     this.defaultRoute = routeHandler;
     return this;
   }
-  abstract handleRequest(request: Request, ctx: ExecutionContext): Promise<Response>
+
+  // executer
+  async handleRequest(args: RouteHandlerExeArgs): Promise<Response> {
+
+    const router = this.registeredRoutes.find(r => r.matcher(args.req));
+
+    // if some registered route matches.
+    if (router) {
+      const { response, options } = await router.routeHandler.execute(args);
+      if (options === RouteResponseOptions.continueWithDefault) {
+        return (await this.defaultRoute.execute(args)).response;
+      }
+      return response;
+    }
+
+    return (await this.defaultRoute.execute(args)).response;
+  }
+
 }
