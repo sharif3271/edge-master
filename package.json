@@ -1,13 +1,13 @@
 {
   "name": "micro-cf-worker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Micro Framework for Cloudflare workers",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/esm/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sharif3271/cf-worker"
+    "url": "https://github.com/sharif3271/micro-cf-worker"
   },
   "author": "Sharif Eiri",
   "license": "UNLICENSED",
