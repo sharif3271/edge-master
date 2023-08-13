@@ -1,19 +1,24 @@
 {
 	"compilerOptions": {
-		"target": "es2021",
-		"lib": ["es2021"],
-		"module": "es2022",
+		"target": "ES2021",
+		"lib": ["ES2021"],
+		"module": "ES2022",
 		"moduleResolution": "node",
     "baseUrl": "./", 
-		"types": ["@cloudflare/workers-types", "./src/globals.d.ts"],
+		"types": ["@cloudflare/workers-types", "./global.d.ts"],
 		"resolveJsonModule": true,
 		"checkJs": false,
-		"noEmit": true,
 		"isolatedModules": true,
 		"allowSyntheticDefaultImports": true,
 		"forceConsistentCasingInFileNames": true,
 		"strict": true,
-		"skipLibCheck": true
+		"skipLibCheck": true,
+    "declaration": true,
+    "outDir": "dist",
 	},
-  "include": ["src/**/*"]
+  "include": ["./src/*.ts", "./global.d.ts"],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
 }

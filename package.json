@@ -1,13 +1,33 @@
 {
-  "name": "cf-worker",
-  "version": "0.9.0",
-  "main": "index.js",
+  "name": "micro-cf-worker",
+  "version": "1.0.0",
+  "description": "A Micro Framework for Cloudflare workers",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sharif3271/cf-worker"
+  },
+  "author": "Sharif Eiri",
+  "license": "UNLICENSED",
   "scripts": {
-    "build": "tsc index.ts",
+    "build": "tsc && cp global.d.ts ./dist",
     "publish": "npm publish"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20230419.0",
     "typescript": "^5.0.4"
-  }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "worker",
+    "cloudflare",
+    "cf-worker",
+    "micro framework"
+  ]
 }

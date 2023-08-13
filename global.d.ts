@@ -1,3 +1,4 @@
+/// <reference types="@cloudflare/workers-types" />
 
 // Utils
 declare type IMatcher = (req: Request) => boolean;
@@ -53,7 +54,7 @@ declare interface IRouteHandler {
   execute: (args: RouteHandlerExeArgs) => Promise<RouteHandlerResponse>;
 }
 declare type RegisteredRoute = {
-  matcher: Utils.IMatcher;
+  matcher: IMatcher;
   routeHandler: IRouteHandler;
 }
 
