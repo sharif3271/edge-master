@@ -7,8 +7,8 @@ declare type IMatcher = (req: Request) => boolean;
 
 // Tasks
 declare enum TaskStatus {
-  TERMINATE_TAKS = 'TERMINATE_TAKS',
-  TERMINATE_TAKS_WITH_DEFAULT = 'TERMINATE_TAKS_WITH_DEFAULT',
+  TERMINATE_TASKS = 'TERMINATE_TASKS',
+  TERMINATE_TASKS_WITH_DEFAULT = 'TERMINATE_TASKS_WITH_DEFAULT',
 }
 declare interface ITaskResponse {
   response: Promise<Response>;
@@ -17,13 +17,13 @@ declare interface ITaskResponse {
 }
 declare type TReqResArgs = {
   req: Request;
-  res: Response;
+  res: Promise<Response>;
 }
 declare type TDutyArgs = TReqResArgs & {
   ctx?: ExecutionContext;
   env?: unknown;
 }
-declare type TTaskDuty = (args: TDutyArgs) => ITaskResponse;
+declare type TTaskDuty = (args: TDutyArgs) => Promise<ITaskResponse>;
 declare type TTaskWhen = (args: TDutyArgs) => boolean;
 
 declare type TaskConstructArgs = {
@@ -32,6 +32,28 @@ declare type TaskConstructArgs = {
   doThen?: TTaskDuty;
 }
 
+
+
 // Routes
-declare type RouteHandlerConstructionArgs = TDutyArgs;
+declare type RouteHandlerExeArgs = {
+  req: Request;
+  ctx?: ExecutionContext;
+  env?: unknown;
+};
+declare enum RouteResponseOptions {
+  continueWithDefault,
+}
+// this is what a Route handler executer should return
+declare type RouteHandlerResponse = {
+  response: Promise<Response>;
+  options?: RouteResponseOptions;
+  message?: string;
+}
+declare interface IRouteHandler {
+  execute: (args: RouteHandlerExeArgs) => Promise<RouteHandlerResponse>;
+}
+declare type RegisteredRoute = {
+  matcher: Utils.IMatcher;
+  routeHandler: IRouteHandler;
+}
 
