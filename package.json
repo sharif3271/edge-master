@@ -1,0 +1,13 @@
+{
+  "name": "cf-worker",
+  "version": "0.9.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc index.ts",
+    "publish": "npm publish"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20230419.0",
+    "typescript": "^5.0.4"
+  }
+}
