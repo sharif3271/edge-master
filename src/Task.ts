@@ -8,16 +8,16 @@ export class Task {
     this.when = args.when;
     this.doThen = args.doThen;
   }
-  run(args: TDutyArgs): ITaskResponse {
+  run(args: TDutyArgs): Promise<ITaskResponse> {
     if (this.when) {
       if (this.when(args)) {
         return this.do(args);
       } else if (this.doThen) {
         return this.doThen(args);
       }
-      return {
-        response: Promise.resolve(args.res),
-      };
+      return Promise.resolve({
+        response: args.res,
+      });
     }
     return this.do(args);
   }

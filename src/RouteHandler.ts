@@ -1,6 +1,6 @@
 import { Task } from "./Task";
 
-export class RouteHandler {
+export class RouteHandler implements IRouteHandler {
 
   taskList: Task[] = [];
   registerTask(task: Task): RouteHandler {
@@ -8,28 +8,27 @@ export class RouteHandler {
     return this;
   }
 
-  async execute(args: TDutyArgs): Promise<Routes.IRouteHandlerResponse> {
+  async execute({ req, env, ctx }: RouteHandlerExeArgs): Promise<RouteHandlerResponse> {
+
+    /* at least one task should be provided */
     if (!this.taskList.length) throw new Error('Atleast one task should register');
-    let hadlerResponse = new Response();
-    let options!: Routes.Options;
+
+    /* makeing an empty response and options */
+    let response = Promise.resolve(new Response());
+    let options!: RouteResponseOptions;
+
     for (const task of this.taskList) {
-      const taskReponse = await task.run(req, hadlerResponse, ctx);
-      hadlerResponse = taskReponse.data;
-      let terminateChain = false; 
-      if (taskReponse.options) {
-        switch (taskReponse.options) {
-          case TasksModule.TaskResOptions.terminateWithCurrent:
+      const taskReponse = await task.run({ req, env, ctx, res: response });
+      response = taskReponse.response;
+      let terminateChain = false;
+      if (taskReponse.status) {
+        switch (taskReponse.status) {
+          case TaskStatus.TERMINATE_TASKS:
             terminateChain = true;
             break;
-          case TasksModule.TaskResOptions.terminateWithDefault:
+          case TaskStatus.TERMINATE_TASKS_WITH_DEFAULT:
             terminateChain = true;
-            options = Routes.Options.continueWithDefault;
-            break;
-          case TasksModule.TaskResOptions.terminateWithError:
-            terminateChain = true;
-            hadlerResponse = new Response(taskReponse.errorMessage || 'Request Faild!', {
-              status: 421,
-            });
+            options = RouteResponseOptions.continueWithDefault;
             break;
           default:
             break;
@@ -39,8 +38,9 @@ export class RouteHandler {
         break;
       }
     }
+
     return {
-      data: hadlerResponse,
+      response,
       options
     }
   }

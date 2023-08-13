@@ -24,16 +24,18 @@ export const pathStartWith = (urlStartingWith: string): IMatcher => (req: Reques
  */
 export const terminare = (when: TTaskWhen, ignoreCurrentRes = false) => {
   return new Task({
-    do: ({res}) => ({
+    do: async ({ res }) => ({
       response: Promise.resolve(res),
-      staus: ignoreCurrentRes ? TaskStatus.TERMINATE_TAKS_WITH_DEFAULT : TaskStatus.TERMINATE_TAKS,
+      staus: ignoreCurrentRes
+        ? TaskStatus.TERMINATE_TASKS_WITH_DEFAULT
+        : TaskStatus.TERMINATE_TASKS,
     }),
     when,
   });
 }
 export const initResponse = () => {
   return new Task({
-    do: ({req}) => ({
+    do: async ({ req }) => ({
       response: fetch(req),
     })
   });
