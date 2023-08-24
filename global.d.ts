@@ -42,7 +42,7 @@ declare type RouteHandlerExeArgs = {
   env?: unknown;
 };
 declare enum RouteResponseOptions {
-  continueWithDefault,
+  CONTINUE_WITH_DEFAULT = 'CONTINUE_WITH_DEFAULT',
 }
 // this is what a Route handler executer should return
 declare type RouteHandlerResponse = {

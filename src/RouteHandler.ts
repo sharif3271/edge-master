@@ -28,7 +28,7 @@ export class RouteHandler implements IRouteHandler {
             break;
           case TaskStatus.TERMINATE_TASKS_WITH_DEFAULT:
             terminateChain = true;
-            options = RouteResponseOptions.continueWithDefault;
+            options = RouteResponseOptions.CONTINUE_WITH_DEFAULT;
             break;
           default:
             break;

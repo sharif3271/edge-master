@@ -21,7 +21,7 @@ export class RoutesContainer {
     // if some registered route matches.
     if (router) {
       const { response, options } = await router.routeHandler.execute(args);
-      if (options === RouteResponseOptions.continueWithDefault) {
+      if (options === RouteResponseOptions.CONTINUE_WITH_DEFAULT) {
         return (await this.defaultRoute.execute(args)).response;
       }
       return response;
