@@ -8,7 +8,7 @@
 		"types": ["@cloudflare/workers-types", "./global.d.ts"],
 		"resolveJsonModule": true,
 		"checkJs": false,
-		"isolatedModules": true,
+		// "isolatedModules": true,
 		"allowSyntheticDefaultImports": true,
 		"forceConsistentCasingInFileNames": true,
 		"strict": true,

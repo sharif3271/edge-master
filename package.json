@@ -1,6 +1,6 @@
 {
   "name": "micro-cf-worker",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A Micro Framework for Cloudflare workers",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

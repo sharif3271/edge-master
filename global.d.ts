@@ -7,7 +7,7 @@ declare type IMatcher = (req: Request) => boolean;
 
 
 // Tasks
-declare enum TaskStatus {
+declare const enum TaskStatus {
   TERMINATE_TASKS = 'TERMINATE_TASKS',
   TERMINATE_TASKS_WITH_DEFAULT = 'TERMINATE_TASKS_WITH_DEFAULT',
 }
@@ -41,7 +41,7 @@ declare type RouteHandlerExeArgs = {
   ctx?: ExecutionContext;
   env?: unknown;
 };
-declare enum RouteResponseOptions {
+declare const enum RouteResponseOptions {
   CONTINUE_WITH_DEFAULT = 'CONTINUE_WITH_DEFAULT',
 }
 // this is what a Route handler executer should return
