@@ -1,12 +1,12 @@
 {
-  "name": "micro-cf-worker",
-  "version": "1.0.3",
-  "description": "A Micro Framework for Cloudflare workers",
+  "name": "edge-master",
+  "version": "0.0.1",
+  "description": "A Micro Framework for Edges",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sharif3271/micro-cf-worker"
+    "url": "https://github.com/sharif3271/edge-master"
   },
   "author": "Sharif Eiri",
   "license": "UNLICENSED",
@@ -27,6 +27,7 @@
     "worker",
     "cloudflare",
     "cf-worker",
-    "micro framework"
+    "micro framework",
+    "edge function"
   ]
 }
