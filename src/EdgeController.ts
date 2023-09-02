@@ -1,4 +1,3 @@
-import { Response, Request } from '@cloudflare/workers-types';
 import { Route, IRouteHandler } from './types/route';
 import { RequestHandlerArgs, Context, ContextWithRes, ContextWithReq, IMatcher } from './types/base';
 import { IRequestInterceptor, IResponseInterceptor, IInterceptor, InterceptorType } from './types/interceptor';

@@ -1,4 +1,3 @@
-import { Response } from "@cloudflare/workers-types";
 import { Task } from "./Task";
 import { ContextWithReq } from "./types/base";
 import { IRouteHandler } from './types/route';

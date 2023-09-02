@@ -1,5 +1,4 @@
 import { TaskConstructArgs, Condition, TaskDuty, TaskContext } from './types/task';
-import { Response } from "@cloudflare/workers-types";
 
 /**
  * Task is a class for defining and executing tasks with optional conditions.

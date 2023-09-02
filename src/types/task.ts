@@ -1,4 +1,3 @@
-import { Response } from '@cloudflare/workers-types';
 import { ContextWithReq, ContextWithRes } from './base';
 
 
