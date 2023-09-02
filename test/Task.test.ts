@@ -1,19 +1,14 @@
+import 'isomorphic-fetch';
 import { Task } from '../src/Task';
 
 describe('Task', () => {
-  it('should run tasks based on conditions', async () => {
-    // const task = new Task({
-    //   do: /* task action */,
-    //   when: /* condition */,
-    //   doThen: /* alternate task action */,
-    // });
-
-    // Define your test context.
-
-    // const response = await task.run(/* test context */);
-
-    // Add your assertions here to test the response.
+  it('should run simple task', async () => {
+    const simpleTask = new Task({
+      do: async () => {
+        return new Response('ok!')
+      },
+    });
+    expect(await (await simpleTask.run({} as any)).text()).toEqual('ok!');
   });
 
-  // Add more test cases as needed.
 });
