@@ -1,47 +1,38 @@
+import { Response } from "@cloudflare/workers-types";
 import { Task } from "./Task";
+import { ContextWithReq } from "./types/base";
+import { IRouteHandler } from './types/route';
 
+/**
+ * RouteHandler is a class for executing a series of tasks in response to a matched route.
+ */
 export class RouteHandler implements IRouteHandler {
-
   taskList: Task[] = [];
+
+  /**
+   * Registers a task to be executed when this route handler is invoked.
+   * @param task The task to register.
+   */
   registerTask(task: Task): RouteHandler {
     this.taskList.push(task);
     return this;
   }
 
-  async execute({ req, env, ctx }: RouteHandlerExeArgs): Promise<RouteHandlerResponse> {
-
-    /* at least one task should be provided */
-    if (!this.taskList.length) throw new Error('Atleast one task should register');
-
-    /* makeing an empty response and options */
-    let response = Promise.resolve(new Response());
-    let options!: RouteResponseOptions;
-
-    for (const task of this.taskList) {
-      const taskReponse = await task.run({ req, env, ctx, res: response });
-      response = taskReponse.response;
-      let terminateChain = false;
-      if (taskReponse.status) {
-        switch (taskReponse.status) {
-          case TaskStatus.TERMINATE_TASKS:
-            terminateChain = true;
-            break;
-          case TaskStatus.TERMINATE_TASKS_WITH_DEFAULT:
-            terminateChain = true;
-            options = RouteResponseOptions.CONTINUE_WITH_DEFAULT;
-            break;
-          default:
-            break;
-        }
+  /**
+   * Executes the registered tasks with the given context and returns a response.
+   * @param ctx The request context with required properties.
+   */
+  async execute(ctx: ContextWithReq): Promise<Response> {
+    try {
+      let res = new Response();
+      for (const task of this.taskList) {
+        res = await task.run({ ...ctx, res });
       }
-      if (terminateChain) {
-        break;
-      }
-    }
-
-    return {
-      response,
-      options
+      return res;
+    } catch (error) {
+      // Handle any errors that occur during task execution here.
+      console.error(`RouteHandler execution error: ${error}`);
+      throw error; // Rethrow the error to propagate it.
     }
   }
 }
