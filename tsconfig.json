@@ -5,7 +5,7 @@
 		"module": "ES2022",
 		"moduleResolution": "node",
     "baseUrl": "./", 
-		"types": ["@cloudflare/workers-types", "./global.d.ts"],
+		"types": ["@cloudflare/workers-types"],
 		"resolveJsonModule": true,
 		"checkJs": false,
 		// "isolatedModules": true,
@@ -16,7 +16,7 @@
     "declaration": true,
     "outDir": "dist",
 	},
-  "include": ["./src/*.ts", "./global.d.ts"],
+  "include": ["./src/*.ts"],
   "exclude": [
     "dist",
     "node_modules"
