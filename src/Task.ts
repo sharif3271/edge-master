@@ -23,20 +23,14 @@ export class Task {
    * @param taskCtx The task context with required properties.
    */
   async run(taskCtx: TaskContext): Promise<Response> {
-    try {
-      if (this.when) {
-        if (this.when(taskCtx)) {
-          return this.do(taskCtx);
-        } else if (this.doThen) {
-          return this.doThen(taskCtx);
-        }
-        return Promise.resolve(taskCtx.res);
+    if (this.when) {
+      if (this.when(taskCtx)) {
+        return this.do(taskCtx);
+      } else if (this.doThen) {
+        return this.doThen(taskCtx);
       }
-      return this.do(taskCtx);
-    } catch (error) {
-      // Handle any errors that occur during task execution here.
-      console.error(`Task execution error: ${error}`);
-      throw error; // Rethrow the error to propagate it.
+      return Promise.resolve(taskCtx.res);
     }
+    return this.do(taskCtx);
   }
 }
