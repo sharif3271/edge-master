@@ -1,6 +1,6 @@
 {
   "name": "edge-master",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A Micro Framework for Edges",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,9 +12,10 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "tsc",
+    "build:minify": "tsc && cd dist && esbuild *.js --minify --outdir=. --allow-overwrite",
     "test": "jest --verbose --detectOpenHandles",
-    "test:coverage": "jest --verbose --coverage",
-    "publish": "npm publish"
+    "test:coverage": "jest --coverage --detectOpenHandles",
+    "publish": "npm run test:coverage && npm run build:minify && npm publish"
   },
   "peerDependencies": {
     "@cloudflare/workers-types": "^4.20230419.0"
@@ -26,7 +27,9 @@
     "jest": "^29.6.4",
     "mocha": "^10.2.0",
     "ts-jest": "^29.1.1",
+    "jest-fetch-mock": "3.0.3",
     "isomorphic-fetch": "3.0.0",
+    "esbuild": "0.19.2",
     "typescript": "^5.0.4"
   },
   "files": [
