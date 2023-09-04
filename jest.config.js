@@ -5,8 +5,14 @@ module.exports = {
   roots: ['<rootDir>'],
   modulePaths: [compilerOptions.baseUrl],
   collectCoverage: true,
-  collectCoverageFrom: ['./test/*.test.ts'],
-  testMatch: ['<rootDir>/test/**/*.{spec,test}.{js,jsx,ts,tsx}'],
+  collectCoverageFrom: ['src/*.ts', '!src/index.ts'],
+  coverageThreshold: {
+    global: {
+      lines: 90,
+      funcs: 100,
+    }
+  },
+  testMatch: ['<rootDir>/test/**/*.test.ts'],
   testEnvironment: 'node',
   preset: 'ts-jest'
 };
