@@ -16,5 +16,5 @@ export type ContextWithReq = Context & {
   req: Request;
 }
 export type ContextWithRes = Context & {
-  res: Response | Promise<Response>;
+  res: Response;
 }
