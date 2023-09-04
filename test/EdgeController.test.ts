@@ -4,7 +4,6 @@ import {
   IRequestInterceptor,
   IResponseInterceptor,
   IRouteHandler,
-  IMatcher,
   InterceptorType,
 } from '../src/types';
 
@@ -87,6 +86,58 @@ describe('EdgeController', () => {
 
     // Assert that the modified request header is present in the response.
     expect((response.headers.get('X-Custom-Header'))).toBe('Intercepted');
+  });
+
+  it('should handle request intercept error', async () => {
+    edgeController.addInterceptor({
+      type: InterceptorType.Request,
+      intercept: async () => {
+        throw new Error('');
+      }
+    })
+    const response = await edgeController.handleRequest({ req: new Request('') });
+    expect(response.status).toBe(500);
+  });
+
+  it('should add a response interceptor and intercept the response', async () => {
+    // Define a sample response interceptor.
+    const interceptor: IResponseInterceptor = {
+      type: InterceptorType.Response,
+      intercept: async ({res, reqCtx}) => {
+        if (reqCtx.req.headers.get('x-panic')) {
+          throw new Error();
+        }
+        return new Response(res.body, { headers : {
+          'X-Custom-Header': 'Intercepted'
+        }});
+      },
+    };
+
+    // Add the response interceptor to the EdgeController.
+    edgeController.addInterceptor(interceptor);
+    const defaultHandler: IRouteHandler = {
+      execute: async () => {
+        return new Response('Default Handler Response');
+      },
+    };
+
+    // Add the route to the EdgeController.
+    edgeController.addRoute(() => true, defaultHandler);
+
+    // Call handleRequest and capture the response.
+    const response = await edgeController.handleRequest({ req: new Request('https://example.com/default') });
+
+    // Assert that the modified request header is present in the response.
+    expect((response.headers.get('X-Custom-Header'))).toBe('Intercepted');
+    expect(await (response.text())).toBe('Default Handler Response');
+
+    const response2 = await edgeController.handleRequest({ req: new Request('', {headers: {
+      'x-panic': 'true'
+    }}) });
+
+    expect(response2.status).toBe(500);
+
+
   });
 
   it('should respond a request immediately after calling responder', async () => {

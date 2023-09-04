@@ -63,17 +63,16 @@ describe('Task', () => {
   });
   it('should handle errors thrown in task actions', async () => {
     const task = new Task({
-      do: async () => {
+      do: () => {
         throw new Error('Task action error');
       },
     });
-  
     try {
       await task.run({} as any);
       // The above line should throw an error, so this line should not be reached.
       expect(true).toBe(false);
     } catch (error) {
-      expect((error as any).message).toEqual('Task action error');
+      expect(error).toMatchObject({message: 'Task action error'});
     }
   });
 });
