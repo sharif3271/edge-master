@@ -1,5 +1,4 @@
 import { Context, ContextWithRes } from "./base";
-import { Request, Response } from "@cloudflare/workers-types";
 
 export enum InterceptorType {
   Request,
@@ -9,5 +8,5 @@ export interface IInterceptor<T = unknown, U = unknown> {
   type: InterceptorType;
   intercept(ctx: T): Promise<U>;
 }
-export interface IRequestInterceptor extends IInterceptor<Context, Request> { }
-export interface IResponseInterceptor extends IInterceptor<ContextWithRes, Response> { }
+export type IRequestInterceptor = IInterceptor<Context, Request>
+export type IResponseInterceptor = IInterceptor<ContextWithRes, Response>
