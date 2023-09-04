@@ -116,7 +116,6 @@ export class EdgeController {
         );
       } catch (error) {
         // Handle any uncaught errors here, e.g., log or respond with an error.
-        console.error(`Request handling error: ${error}`);
         responder(new Response('Internal Server Error', { status: 500 }));
       }
     });
