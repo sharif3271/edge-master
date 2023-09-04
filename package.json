@@ -12,7 +12,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "tsc",
-    "test": "jest",
+    "test": "jest --verbose --detectOpenHandles",
+    "test:coverage": "jest --verbose --coverage",
     "publish": "npm publish"
   },
   "peerDependencies": {
