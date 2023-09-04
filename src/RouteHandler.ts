@@ -6,7 +6,7 @@ import { IRouteHandler } from './types/route';
  * RouteHandler is a class for executing a series of tasks in response to a matched route.
  */
 export class RouteHandler implements IRouteHandler {
-  taskList: Task[] = [];
+  private taskList: Task[] = [];
 
   /**
    * Registers a task to be executed when this route handler is invoked.
