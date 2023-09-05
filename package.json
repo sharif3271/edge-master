@@ -10,7 +10,7 @@
     "url": "https://github.com/sharif3271/edge-master"
   },
   "author": "Sharif Eiri",
-  "license": "UNLICENSED",
+  "license": "MIT License",
   "scripts": {
     "build": "tsc",
     "build:minify": "tsc && cd dist && esbuild *.js --minify --outdir=. --allow-overwrite",
@@ -47,24 +47,16 @@
     "AWS",
     "lambda",
     "serverless",
-    "cloud-computing",
-    "edge-computing",
     "web-workers",
     "JavaScript-framework",
-    "middleware",
     "microservices",
     "routing",
     "HTTP-handling",
-    "Edge-Side-Includes",
-    "performance-optimization",
-    "content-delivery",
     "serverless-functions",
     "serverless-architecture",
     "worker-framework",
-    "reverse-proxy",
     "API-gateway",
     "content-generation",
-    "caching",
-    "load-balancing"
+    "caching"
   ]
 }
