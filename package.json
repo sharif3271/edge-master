@@ -4,6 +4,7 @@
   "description": "A Micro Framework for Edges",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "homepage": "https://github.com/sharif3271/edge-master",
   "repository": {
     "type": "git",
     "url": "https://github.com/sharif3271/edge-master"
@@ -32,16 +33,38 @@
     "esbuild": "0.19.2",
     "typescript": "^5.0.4"
   },
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "files": [
     "dist",
     "LICENSE",
     "README.md"
   ],
   "keywords": [
-    "worker",
     "cloudflare",
-    "cf-worker",
-    "micro framework",
-    "edge function"
+    "AZURE",
+    "AWS",
+    "lambda",
+    "serverless",
+    "cloud-computing",
+    "edge-computing",
+    "web-workers",
+    "JavaScript-framework",
+    "middleware",
+    "microservices",
+    "routing",
+    "HTTP-handling",
+    "Edge-Side-Includes",
+    "performance-optimization",
+    "content-delivery",
+    "serverless-functions",
+    "serverless-architecture",
+    "worker-framework",
+    "reverse-proxy",
+    "API-gateway",
+    "content-generation",
+    "caching",
+    "load-balancing"
   ]
 }
