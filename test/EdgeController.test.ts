@@ -95,7 +95,7 @@ describe('EdgeController', () => {
         throw new Error('');
       }
     })
-    const response = await edgeController.handleRequest({ req: new Request('') });
+    const response = await edgeController.handleRequest({ req: new Request('https://sample.com') });
     expect(response.status).toBe(500);
   });
 
@@ -131,7 +131,7 @@ describe('EdgeController', () => {
     expect((response.headers.get('X-Custom-Header'))).toBe('Intercepted');
     expect(await (response.text())).toBe('Default Handler Response');
 
-    const response2 = await edgeController.handleRequest({ req: new Request('', {headers: {
+    const response2 = await edgeController.handleRequest({ req: new Request('https://sample.com', {headers: {
       'x-panic': 'true'
     }}) });
 

@@ -46,7 +46,7 @@ describe('RouteHandler', () => {
       }
     }));
     try {
-      await routeHandler.execute({req: new Request('')} as any);
+      await routeHandler.execute({req: new Request('https://example.com')} as any);
       expect(true).toBe(false);
     } catch (error) {
       expect(error).toMatchObject({message: 'Execution Error'});
