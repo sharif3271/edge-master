@@ -1,12 +1,36 @@
-# EdgeMaster
-
-EdgeMaster is a minimalistic and versatile microframework for handling routing and request/response interception in cloud-based environments like Cloudflare Workers or serverless functions. It provides a lightweight yet powerful toolset to streamline your edge application development.
-
 <p align="center">
   <a href="https://yourappurl.com">
-    <img src="https://pstorage.asanflow.com/micro-worker/logo-text.svg" alt="EdgeMaster Logo" />
+    <img style="width:100%;max-width:450px;" src="https://pstorage.asanflow.com/micro-worker/logo-text.svg" alt="EdgeMaster Logo" />
   </a>
 </p>
+
+---
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/edge-master" target="_blank">
+    <img src="https://img.shields.io/npm/v/edge-master.svg?style=flat-square" alt="npm version" />
+  </a>
+  <a href="https://deno.bundlejs.com/?q=edge-master" target="_blank">
+    <img src="https://deno.bundlejs.com/?q=edge-master&badge&badge-style=flat-square" alt="bundle size" />
+  </a>
+  <a href="https://github.com/sharif3271/edge-master/actions/workflows/tests.yml" target="_blank">
+    <img src="https://img.shields.io/github/actions/workflow/status/sharif3271/edge-master/tests.yml?branch=main&style=flat-square" alt="build status" />
+  </a>
+  <a href="https://coveralls.io/github/sharif3271/edge-master" target="_blank">
+    <img src="https://img.shields.io/coveralls/github/sharif3271/edge-master/main?style=flat-square" alt="code coverage" />
+  </a>
+  <a href="https://www.npmjs.com/package/edge-master" target="_blank">
+    <img src="https://img.shields.io/npm/dw/edge-master?style=flat-square" alt="weekly downloads" />
+  </a>
+  <a href="https://github.com/sharif3271/edge-master/issues" target="_blank">
+    <img src="https://img.shields.io/github/issues/sharif3271/edge-master?style=flat-square" alt="open issues" />
+  </a>
+  <a href="" target="_blank">
+    <img src="" alt="" />
+  </a>
+</p>
+
+EdgeMaster is a flexible microframework designed to handle routing and intercept requests/responses in cloud based environments such, as Cloudflare Workers or serverless functions. It offers a robust set of tools that can greatly simplify the development of your edge applications.
 
 ---
 
