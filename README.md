@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://em.asanflow.com/">
-    <img width="450px" style="width:100%;max-width:450px;" src="https://pstorage.asanflow.com/micro-worker/logo-text.svg" alt="EdgeMaster Logo" />
+    <img width="450px" src="https://pstorage.asanflow.com/micro-worker/logo-text.svg" alt="EdgeMaster Logo" />
   </a>
 </p>
 
