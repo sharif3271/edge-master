@@ -52,11 +52,11 @@ function Home() {
                 'button button--outline button--secondary button--lg',
                 styles.getStarted,
               )}
-              to={useBaseUrl('/docs/gettingstarted')}>
+              to={useBaseUrl('/docs/getting-started/')}>
               Get Started
             </Link>
             <Link
-              to="/docs/why-edge-master"
+              to="/docs/Intro/#why-edgemaster"
               className={clsx(
                 'button button--outline button--secondary button--lg',
                 styles.getStarted,

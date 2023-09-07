@@ -90,7 +90,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} EdgeMaster. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} EdgeMaster.<br/> Built with Docusaurus.`,
       },
       prism: {
         theme: lightCodeTheme,

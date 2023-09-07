@@ -64,6 +64,12 @@ html[data-theme=dark] {
     body .footer__bottom > div {
         text-align: center;
     }
+    .footer > .container {
+      flex-direction: column !important;
+    }
+    .row.footer__links > div {
+      width: 50% !important;
+    }
 }
 
 @media (max-width: 500px) {
@@ -117,15 +123,20 @@ html[data-theme=dark] {
     color: var(--wdio-link-color);
 }
 
+.footer > .container {
+  display: flex;
+  flex-direction: row-reverse;
+}
+
 .footer__logo {
     max-width: 125px;
 }
 .footer__links {
-    width: 75%;
-    float: right;
+    flex: 1;
 }
 .footer__bottom {
-    width: 25%;
+    width: auto;
+    margin-right: 46px;
 }
 .footer__bottom > div {
     text-align: left;
@@ -137,6 +148,7 @@ html[data-theme=dark] {
 .footer__copyright {
     font-size: .8em;
     text-align: left;
+    white-space: nowrap;
 }
 
 html[data-theme=dark] {

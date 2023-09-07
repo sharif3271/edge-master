@@ -35,6 +35,9 @@ html[data-theme=dark] {
     .navbar__toggle {
         margin-left: 1rem;
     }
+    .navbar__logo {
+      display: none !important;
+    }
 }
 
 .header-github-link:hover,
