@@ -8,6 +8,12 @@ import { IRouteHandler } from './types/route';
 export class RouteHandler implements IRouteHandler {
   private taskList: Task[] = [];
 
+  constructor(initial?: Task | Task[]) {
+    if (initial !== undefined) {
+      this.taskList = [initial].flat();
+    }
+  }
+
   /**
    * Registers a task to be executed when this route handler is invoked.
    * @param task The task to register.
