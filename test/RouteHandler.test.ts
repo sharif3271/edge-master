@@ -53,5 +53,32 @@ describe('RouteHandler', () => {
     }
   });
 
-  // Add more test cases as needed.
+  it('can add a Task and Task List on construction', async () => {
+    const rHandlerWithATask = new RouteHandler(new Task({
+      do: async ({res}) => {
+        return new Response('html', res);
+      }
+    }));
+    const rHandlerWithTasks = new RouteHandler([
+      new Task({
+        do: async () => {
+          return new Response('', { headers: { 'max-age': '120d' } });
+        }
+      }),
+      new Task({
+        do: async ({res}) => {
+          return new Response('html', res);
+        }
+      })
+    ]);
+
+    const request = new Request('https://sample.com/users');
+
+    const res1 = await rHandlerWithATask.execute({req: request} as any);
+    const res2 = await rHandlerWithTasks.execute({req: request} as any);
+
+    expect(await res1.text()).toBe('html');
+    expect(res2.headers.get('max-age')).toBe('120d');
+  })
+
 });
