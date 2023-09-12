@@ -211,7 +211,7 @@ router.addInterceptor(loggingInterceptor);
 
 ## Examples
 
-Check out more examples and use cases in the [EdgeMaster Examples](https://github.com/sharif3271/edge-master/tree/main/examples).
+Check out more examples and use cases in the [EdgeMaster Examples](https://github.com/sharif3271/edge-master/tree/main/example).
 
 ---
 
