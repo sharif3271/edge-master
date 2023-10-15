@@ -62,8 +62,18 @@ export class EdgeController {
     if (route) {
       return route.routeHandler.execute(ctx);
     } else {
-      // Fallback to fetching the original request if no route matches.
-      return fetch(ctx.req);
+      /**
+       * if there is no route founded then an error will be thrown.
+       * you can define a default route handler. for preventing throwing error.
+       * 
+       * this RouteHandler should be the last one added to the controller.
+       * EdgeController.addRoute(
+       *  () => true,
+       *  ({req}) => fetch(req)
+       * )
+       * 
+       */
+      throw new Error('There is no route maches related to this request');
     }
   }
 
