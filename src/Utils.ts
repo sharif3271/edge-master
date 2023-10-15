@@ -18,13 +18,3 @@ export const urlStartWith = (urlStartingWith: string): IMatcher => (req: Request
 export const pathStartWith = (urlStartingWith: string): IMatcher => (req: Request) => {
   return new URL(req.url).pathname.startsWith(urlStartingWith);
 }
-
-
-/**
- * build in tasks
- */
-export const initResponse = () => {
-  return new Task({
-    do: async ({ req }) => fetch(req)
-  });
-}

@@ -1,6 +1,6 @@
 import 'isomorphic-fetch';
 import fetchMock from "jest-fetch-mock";
-import { initResponse, pathStartWith, routePattern, urlStartWith } from '../src/Utils';
+import { pathStartWith, routePattern, urlStartWith } from '../src/Utils';
 
 describe('Utils & built-in helpers', () => {
 
@@ -26,12 +26,5 @@ describe('Utils & built-in helpers', () => {
     const matcher = routePattern('*/test/user/*');
     const req = new Request('https://origin.com/test/user/12');
     expect(matcher(req)).toBe(true);
-  });
-  it('BuiltIn Task: initResponse', async () => {
-    //@ts-ignore
-    fetch.mockResponseOnce('');
-    const InitRequest = initResponse();
-    const req = new Request('https://google.com');
-    expect((await InitRequest.run({req} as any)).ok).toBe(true);
   });
 });
