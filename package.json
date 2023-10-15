@@ -1,6 +1,6 @@
 {
   "name": "edge-master",
-  "version": "0.9.1",
+  "version": "0.9.3",
   "description": "A Micro Framework for Edges",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
