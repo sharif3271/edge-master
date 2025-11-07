@@ -1,0 +1,2 @@
+# Copy this file to .dev.vars and update with your values
+JWT_SECRET=your-secret-key-here-must-be-at-least-32-characters-long-for-security

@@ -1,0 +1,6 @@
+name = "edge-master-auth"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# For local development, create a .dev.vars file with:
+# JWT_SECRET=your-secret-key-here-min-32-characters-long
