@@ -8,9 +8,13 @@ export type RequestHandlerArgs<T = any> = {
   env?: T;
   exeCtx?: ExecutionContext;
 }
+
+export type ContextState = Map<string, any>;
+
 export type Context = {
   reqCtx: RequestHandlerArgs;
   responder: (res: Response | PromiseLike<Response>) => void;
+  state: ContextState;
 }
 export type ContextWithReq = Context & {
   req: Request;

@@ -6,5 +6,6 @@ export interface IRouteHandler {
 export type Route = {
   matcher: IMatcher;
   routeHandler: IRouteHandler;
+  priority?: number; // Higher priority routes are matched first
 }
 
