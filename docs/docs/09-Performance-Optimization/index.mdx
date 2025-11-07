@@ -1,7 +1,683 @@
 ---
 title: Performance Optimization
+description: Optimize your EdgeMaster applications for maximum performance
 ---
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+# Performance Optimization
+
+Learn how to optimize your EdgeMaster applications for maximum performance at the edge.
+
+## Edge Computing Fundamentals
+
+### Understanding Cloudflare Workers
+
+Cloudflare Workers run in V8 isolates, which are:
+- **Lightweight** - Start in <1ms (no cold starts)
+- **Isolated** - Secure sandbox per request
+- **Limited** - CPU time limits (10-50ms for free tier, 30s for paid)
+- **Distributed** - Run at 275+ locations worldwide
+
+### Key Performance Factors
+
+1. **Bundle Size** - Smaller bundles = faster startup
+2. **CPU Time** - Minimize computation per request
+3. **Network I/O** - Reduce external API calls
+4. **Caching** - Cache aggressively at the edge
+5. **Database Queries** - Optimize and minimize queries
+
+---
+
+## Bundle Size Optimization
+
+### Measure Your Bundle
+
+```bash
+npx wrangler deploy --dry-run --outdir=dist
+ls -lh dist
+```
+
+### Target Size Goals
+
+- **Excellent**: < 50 KB
+- **Good**: 50-100 KB
+- **Acceptable**: 100-200 KB
+- **Large**: > 200 KB (consider splitting)
+
+### Minimize Dependencies
+
+**Bad - Large Dependencies:**
+```typescript
+import * as _ from 'lodash'; // ~71 KB
+import moment from 'moment';  // ~67 KB
+```
+
+**Good - Tree-shakeable Imports:**
+```typescript
+import pick from 'lodash/pick';  // ~5 KB
+import { format } from 'date-fns'; // ~10 KB
+```
+
+**Best - Native Methods:**
+```typescript
+// Use native JavaScript instead
+const pick = (obj, keys) =>
+  keys.reduce((acc, key) => ({ ...acc, [key]: obj[key] }), {});
+
+const formatDate = (date) =>
+  new Intl.DateTimeFormat('en-US').format(date);
+```
+
+### EdgeMaster is Already Optimized
+
+EdgeMaster has **zero production dependencies** and a **~14 KB bundle size**, so it won't bloat your application.
+
+---
+
+## Caching Strategies
+
+### Cloudflare Cache API
+
+Use EdgeMaster's built-in cache interceptor:
+
+```typescript
+import { cacheInterceptor } from 'edge-master';
+
+const { check, store } = cacheInterceptor({
+  ttl: 3600, // 1 hour
+  methods: ['GET', 'HEAD'],
+  varyHeaders: ['Accept-Language'],
+  cacheKey: (req) => {
+    const url = new URL(req.url);
+    // Include version in cache key for cache busting
+    return `v1:${url.pathname}${url.search}`;
+  }
+});
+
+app.addInterceptor(check);
+app.addInterceptor(store);
+```
+
+### Cache Everything Possible
+
+```typescript
+// Cache static data
+app.GET('/config', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    const config = await env.KV.get('config', {
+      cacheTtl: 3600 // Cache in KV for 1 hour
+    });
+    return json(config);
+  }
+})));
+
+// Cache responses with ETags
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const user = await getUser(id);
+
+    const etag = `"${user.updatedAt}"`;
+    if (req.headers.get('If-None-Match') === etag) {
+      return new Response(null, { status: 304 });
+    }
+
+    return json(user, {
+      headers: {
+        'ETag': etag,
+        'Cache-Control': 'max-age=60'
+      }
+    });
+  }
+})));
+```
+
+### Cache Headers
+
+```typescript
+// Immutable resources
+app.GET('/assets/*', new RouteHandler(new Task({
+  do: async () => {
+    return new Response(asset, {
+      headers: {
+        'Cache-Control': 'public, max-age=31536000, immutable'
+      }
+    });
+  }
+})));
+
+// Dynamic content
+app.GET('/feed', new RouteHandler(new Task({
+  do: async () => {
+    const feed = await getFeed();
+    return json(feed, {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300'
+      }
+    });
+  }
+})));
+```
+
+---
+
+## Database Optimization
+
+### Use Connection Pooling
+
+Cloudflare D1 handles this automatically, but for external databases:
+
+```typescript
+// Bad - Create connection per request
+app.GET('/users', new RouteHandler(new Task({
+  do: async () => {
+    const db = await createConnection(); // Slow!
+    const users = await db.query('SELECT * FROM users');
+    await db.close();
+    return json({ users });
+  }
+})));
+
+// Good - Reuse connection pool
+const pool = createPool({ /* config */ });
+
+app.GET('/users', new RouteHandler(new Task({
+  do: async () => {
+    const users = await pool.query('SELECT * FROM users');
+    return json({ users });
+  }
+})));
+```
+
+### Optimize Queries
+
+```typescript
+// Bad - Multiple queries
+const user = await db.get('SELECT * FROM users WHERE id = ?', userId);
+const posts = await db.all('SELECT * FROM posts WHERE user_id = ?', userId);
+const comments = await db.all('SELECT * FROM comments WHERE user_id = ?', userId);
+
+// Good - Single query with JOIN
+const result = await db.all(`
+  SELECT
+    u.*,
+    p.id as post_id, p.title as post_title,
+    c.id as comment_id, c.text as comment_text
+  FROM users u
+  LEFT JOIN posts p ON p.user_id = u.id
+  LEFT JOIN comments c ON c.user_id = u.id
+  WHERE u.id = ?
+`, userId);
+```
+
+### Use Indexes
+
+```sql
+-- Create indexes for frequently queried columns
+CREATE INDEX idx_posts_user_id ON posts(user_id);
+CREATE INDEX idx_posts_created_at ON posts(created_at);
+CREATE INDEX idx_users_email ON users(email);
+```
+
+### Pagination
+
+```typescript
+app.GET('/posts', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const page = parseInt(getQuery(req, 'page') || '1');
+    const limit = 20;
+    const offset = (page - 1) * limit;
+
+    const posts = await env.DB.prepare(`
+      SELECT * FROM posts
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `).bind(limit, offset).all();
+
+    return json({
+      posts: posts.results,
+      page,
+      hasMore: posts.results.length === limit
+    });
+  }
+})));
+```
+
+---
+
+## KV Storage Best Practices
+
+### Batch Operations
+
+```typescript
+// Bad - Sequential writes
+for (const item of items) {
+  await env.KV.put(`item:${item.id}`, JSON.stringify(item));
+}
+
+// Good - Parallel writes
+await Promise.all(
+  items.map(item =>
+    env.KV.put(`item:${item.id}`, JSON.stringify(item))
+  )
+);
+```
+
+### Use Expiration
+
+```typescript
+// Auto-expire temporary data
+await env.KV.put('session:123', sessionData, {
+  expirationTtl: 3600 // Expire after 1 hour
+});
+```
+
+### Cache KV Reads
+
+```typescript
+// Cache KV reads in memory for the request
+const cache = new Map();
+
+async function getCached(env, key) {
+  if (cache.has(key)) {
+    return cache.get(key);
+  }
+
+  const value = await env.KV.get(key, 'json');
+  cache.set(key, value);
+  return value;
+}
+```
+
+---
+
+## Network Optimization
+
+### Minimize External API Calls
+
+```typescript
+// Bad - Sequential calls
+const user = await fetch('https://api.example.com/user/123').then(r => r.json());
+const posts = await fetch('https://api.example.com/posts?user=123').then(r => r.json());
+const comments = await fetch('https://api.example.com/comments?user=123').then(r => r.json());
+
+// Good - Parallel calls
+const [user, posts, comments] = await Promise.all([
+  fetch('https://api.example.com/user/123').then(r => r.json()),
+  fetch('https://api.example.com/posts?user=123').then(r => r.json()),
+  fetch('https://api.example.com/comments?user=123').then(r => r.json())
+]);
+```
+
+### Use Timeouts
+
+```typescript
+app.GET('/external', new RouteHandler(new Task({
+  do: async () => {
+    try {
+      const response = await fetch('https://slow-api.example.com/data', {
+        signal: AbortSignal.timeout(5000) // 5s timeout
+      });
+
+      return json(await response.json());
+    } catch (error) {
+      if (error.name === 'TimeoutError') {
+        return serverError('External API timeout');
+      }
+      throw error;
+    }
+  }
+})));
+```
+
+### Cache External API Responses
+
+```typescript
+app.GET('/weather', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    const cached = await env.KV.get('weather:current', 'json');
+    if (cached) return json(cached);
+
+    const weather = await fetch('https://api.weather.com/current')
+      .then(r => r.json());
+
+    // Cache for 10 minutes
+    await env.KV.put('weather:current', JSON.stringify(weather), {
+      expirationTtl: 600
+    });
+
+    return json(weather);
+  }
+})));
+```
+
+---
+
+## CPU Optimization
+
+### Avoid Heavy Computation
+
+```typescript
+// Bad - Heavy computation in request
+app.POST('/process', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const data = await parseJSON(req);
+    const result = heavyComputation(data); // Takes 500ms!
+    return json({ result });
+  }
+})));
+
+// Good - Use Durable Objects or Queue
+app.POST('/process', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const data = await parseJSON(req);
+    const jobId = crypto.randomUUID();
+
+    // Queue for background processing
+    await env.QUEUE.send({ jobId, data });
+
+    return json({ jobId, status: 'processing' }, { status: 202 });
+  }
+})));
+```
+
+### Optimize Algorithms
+
+```typescript
+// Bad - O(n²) complexity
+function findDuplicates(arr) {
+  const duplicates = [];
+  for (let i = 0; i < arr.length; i++) {
+    for (let j = i + 1; j < arr.length; j++) {
+      if (arr[i] === arr[j]) duplicates.push(arr[i]);
+    }
+  }
+  return duplicates;
+}
+
+// Good - O(n) complexity
+function findDuplicates(arr) {
+  const seen = new Set();
+  const duplicates = new Set();
+
+  for (const item of arr) {
+    if (seen.has(item)) {
+      duplicates.add(item);
+    }
+    seen.add(item);
+  }
+
+  return Array.from(duplicates);
+}
+```
+
+### Use Streaming for Large Responses
+
+```typescript
+app.GET('/large-data', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+
+    // Stream data in chunks
+    (async () => {
+      const items = await env.DB.prepare('SELECT * FROM large_table').all();
+
+      writer.write('[');
+      for (let i = 0; i < items.results.length; i++) {
+        if (i > 0) writer.write(',');
+        writer.write(JSON.stringify(items.results[i]));
+      }
+      writer.write(']');
+      writer.close();
+    })();
+
+    return new Response(readable, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+})));
+```
+
+---
+
+## Interceptor Optimization
+
+### Order Matters
+
+```typescript
+// Fast interceptors first
+app.addInterceptor(cacheCheck);        // Check cache first
+app.addInterceptor(rateLimitInterceptor); // Rate limit next
+app.addInterceptor(jwtInterceptor);       // Auth after rate limit
+app.addInterceptor(loggingInterceptor);   // Logging last
+
+app.addInterceptor(responseLogger);  // Response logging
+app.addInterceptor(cacheStore);      // Store in cache
+```
+
+### Conditional Interceptors
+
+```typescript
+// Only apply JWT auth to protected routes
+app.addInterceptor(jwtInterceptor({
+  verify: verifyToken,
+  exclude: ['/public/*', '/auth/*', '/health']
+}));
+
+// Only log in development
+if (env.ENVIRONMENT === 'development') {
+  app.addInterceptor(loggingInterceptor());
+}
+```
+
+---
+
+## Memory Management
+
+### Avoid Memory Leaks
+
+```typescript
+// Bad - Global state persists
+const userCache = new Map();
+
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+
+    if (!userCache.has(id)) {
+      userCache.set(id, await getUser(id)); // Memory leak!
+    }
+
+    return json({ user: userCache.get(id) });
+  }
+})));
+
+// Good - Use KV or request-scoped state
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+
+    const cached = await env.KV.get(`user:${id}`, 'json');
+    if (cached) return json({ user: cached });
+
+    const user = await getUser(id);
+    await env.KV.put(`user:${id}`, JSON.stringify(user), {
+      expirationTtl: 300
+    });
+
+    return json({ user });
+  }
+})));
+```
+
+### Clean Up Resources
+
+```typescript
+app.GET('/file', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const stream = await env.R2.get('large-file.bin');
+
+    try {
+      return new Response(stream.body, {
+        headers: { 'Content-Type': 'application/octet-stream' }
+      });
+    } finally {
+      // Cleanup if needed
+      stream = null;
+    }
+  }
+})));
+```
+
+---
+
+## Route Optimization
+
+### Use Priority for Hot Paths
+
+```typescript
+// Most frequently accessed routes get highest priority
+app.GET('/health', healthHandler, 1000);
+app.GET('/api/users/me', currentUserHandler, 900);
+
+// Less common routes
+app.GET('/api/users/:id', userHandler, 100);
+app.GET('/api/*', catchAllHandler, 0);
+```
+
+### Group Related Routes
+
+```typescript
+// Efficient grouping
+app.group('/api/v1', (v1) => {
+  v1.group('/users', (users) => {
+    users.GET('/', listHandler);
+    users.GET('/:id', getHandler);
+    users.POST('/', createHandler);
+  });
+});
+```
+
+---
+
+## Monitoring Performance
+
+### Add Timing Headers
+
+```typescript
+const timingInterceptor: IResponseInterceptor = {
+  type: InterceptorType.Response,
+  async intercept(response, ctx) {
+    const start = getState(ctx, 'startTime') || Date.now();
+    const duration = Date.now() - start;
+
+    const headers = new Headers(response.headers);
+    headers.set('Server-Timing', `total;dur=${duration}`);
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
+  }
+};
+
+app.addInterceptor(timingInterceptor);
+```
+
+### Log Slow Requests
+
+```typescript
+app.addInterceptor({
+  type: InterceptorType.Request,
+  async intercept(ctx) {
+    setState(ctx, 'startTime', Date.now());
+    return ctx.reqCtx.req;
+  }
+});
+
+app.addInterceptor({
+  type: InterceptorType.Response,
+  async intercept(response, ctx) {
+    const duration = Date.now() - getState(ctx, 'startTime');
+
+    if (duration > 1000) { // Log if > 1s
+      console.warn('Slow request:', {
+        url: ctx.reqCtx.req.url,
+        duration,
+        status: response.status
+      });
+    }
+
+    return response;
+  }
+});
+```
+
+---
+
+## Performance Checklist
+
+### Before Deployment
+
+- [ ] Bundle size < 200 KB
+- [ ] Database queries indexed
+- [ ] Caching strategy implemented
+- [ ] Rate limiting configured
+- [ ] Timeouts on external calls
+- [ ] No synchronous blocking operations
+- [ ] Interceptor order optimized
+- [ ] Hot paths use high priority
+- [ ] Memory leaks checked
+- [ ] Performance monitoring enabled
+
+### Monitoring Metrics
+
+- **P50 Response Time** - Should be < 50ms
+- **P95 Response Time** - Should be < 200ms
+- **P99 Response Time** - Should be < 500ms
+- **Cache Hit Rate** - Target > 80%
+- **Error Rate** - Target < 1%
+- **CPU Time** - Stay under limits
+
+---
+
+## Performance Testing
+
+### Load Testing with k6
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '1m', target: 100 },  // Ramp up
+    { duration: '3m', target: 100 },  // Stay at 100 RPS
+    { duration: '1m', target: 0 },    // Ramp down
+  ],
+};
+
+export default function () {
+  const res = http.get('https://your-worker.workers.dev/api/users');
+
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 200ms': (r) => r.timings.duration < 200,
+  });
+
+  sleep(1);
+}
+```
+
+---
+
+## Next Steps
+
+- [Best Practices](/docs/Best-Practices) - Apply recommended patterns
+- [Troubleshooting](/docs/Troubleshooting) - Debug performance issues
+- [Examples](/docs/Examples) - See optimizations in action
+
+---
+
+**Questions?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)

@@ -1,8 +1,694 @@
 ---
 title: Troubleshooting
+description: Debug common issues in EdgeMaster applications
 ---
 
+# Troubleshooting
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+Common issues and solutions for EdgeMaster applications.
+
+## Quick Debugging
+
+### Enable Debug Logging
+
+```typescript
+import { loggingInterceptor } from 'edge-master';
+
+const { request, response } = loggingInterceptor({
+  level: 'debug',
+  logTiming: true,
+  logHeaders: true,
+  logBody: true
+});
+
+app.addInterceptor(request);
+app.addInterceptor(response);
+```
+
+### Check Wrangler Logs
+
+```bash
+# Tail logs in development
+npx wrangler dev
+
+# Tail production logs
+npx wrangler tail
+
+# Filter logs
+npx wrangler tail --status error
+```
+
+---
+
+## Common Issues
+
+### Routes Not Matching
+
+**Problem:** Route doesn't match requests
+
+**Symptoms:**
+- 404 Not Found for valid routes
+- Wrong handler executed
+
+**Solutions:**
+
+**1. Check Pattern Syntax**
+```typescript
+// ❌ Bad - Missing leading slash
+app.GET('users', handler);
+
+// ✅ Good
+app.GET('/users', handler);
+```
+
+**2. Check Parameter Matching**
+```typescript
+// Route defined as:
+app.GET('/users/:id', handler);
+
+// Must access with:
+// ✅ /users/123
+// ❌ /users (missing :id)
+// ❌ /users/ (trailing slash)
+```
+
+**3. Use Route Priorities**
+```typescript
+// Specific routes should have higher priority
+app.GET('/users/me', meHandler, 100);    // High priority
+app.GET('/users/:id', idHandler, 50);    // Lower priority
+
+// Without priority, /users/me might match /users/:id
+```
+
+**4. Debug Route Matching**
+```typescript
+app.addInterceptor({
+  type: InterceptorType.Request,
+  async intercept(ctx) {
+    console.log('Request:', ctx.reqCtx.req.method, ctx.reqCtx.req.url);
+    return ctx.reqCtx.req;
+  }
+});
+```
+
+---
+
+### CORS Errors
+
+**Problem:** Browser blocks requests with CORS errors
+
+**Symptoms:**
+- `Access-Control-Allow-Origin` errors in console
+- Preflight OPTIONS requests failing
+
+**Solutions:**
+
+**1. Add CORS Interceptor**
+```typescript
+import { corsInterceptor } from 'edge-master';
+
+app.addInterceptor(corsInterceptor({
+  origin: 'https://your-frontend.com',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+```
+
+**2. Handle OPTIONS Requests**
+```typescript
+// CORS interceptor automatically handles OPTIONS
+// But you can also manually handle them:
+app.OPTIONS('/*', new RouteHandler(new Task({
+  do: async () => new Response(null, { status: 204 })
+})));
+```
+
+**3. Check Interceptor Order**
+```typescript
+// CORS should be first
+app.addInterceptor(corsInterceptor({ origin: '*' }));
+app.addInterceptor(jwtInterceptor({ ... }));
+```
+
+---
+
+### Authentication Issues
+
+**Problem:** JWT authentication failing
+
+**Symptoms:**
+- 401 Unauthorized errors
+- "Invalid token" messages
+- Token not being extracted
+
+**Solutions:**
+
+**1. Check Token Format**
+```typescript
+// Token should be in Authorization header:
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+
+// Verify extraction:
+app.addInterceptor(jwtInterceptor({
+  verify: async (token) => {
+    console.log('Token received:', token);
+    return verifyJWT(token, env.JWT_SECRET);
+  },
+  extractToken: (req) => {
+    const auth = req.headers.get('Authorization');
+    console.log('Auth header:', auth);
+    return auth?.replace('Bearer ', '') || null;
+  }
+}));
+```
+
+**2. Check Secret Configuration**
+```typescript
+// Make sure secret is set
+export default {
+  fetch: (request: Request, env: any) => {
+    if (!env.JWT_SECRET) {
+      throw new Error('JWT_SECRET not configured');
+    }
+    return app.handleRequest({ req: request, env });
+  }
+};
+```
+
+**3. Debug Verification**
+```typescript
+app.addInterceptor(jwtInterceptor({
+  verify: async (token) => {
+    try {
+      const payload = await verifyJWT(token, env.JWT_SECRET);
+      console.log('Verified payload:', payload);
+      return payload;
+    } catch (error) {
+      console.error('Verification failed:', error);
+      throw error;
+    }
+  },
+  onError: (error) => {
+    console.error('JWT error:', error);
+    return unauthorized(error.message);
+  }
+}));
+```
+
+---
+
+### Request Parsing Errors
+
+**Problem:** Cannot parse request body
+
+**Symptoms:**
+- "Unexpected end of JSON input"
+- "Invalid JSON"
+- Empty request body
+
+**Solutions:**
+
+**1. Handle Parsing Errors**
+```typescript
+import { parseJSON, RequestParseError, badRequest } from 'edge-master';
+
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    try {
+      const body = await parseJSON(req);
+      return json({ user: body });
+    } catch (error) {
+      if (error instanceof RequestParseError) {
+        return badRequest('Invalid JSON in request body');
+      }
+      throw error;
+    }
+  }
+})));
+```
+
+**2. Check Content-Type**
+```typescript
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const contentType = req.headers.get('Content-Type');
+
+    if (!contentType?.includes('application/json')) {
+      return badRequest('Content-Type must be application/json');
+    }
+
+    const body = await parseJSON(req);
+    return json({ user: body });
+  }
+})));
+```
+
+**3. Handle Empty Body**
+```typescript
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const text = await req.text();
+
+    if (!text) {
+      return badRequest('Request body is empty');
+    }
+
+    try {
+      const body = JSON.parse(text);
+      return json({ user: body });
+    } catch {
+      return badRequest('Invalid JSON');
+    }
+  }
+})));
+```
+
+---
+
+### State Management Issues
+
+**Problem:** Context state not persisting between tasks
+
+**Symptoms:**
+- `getState()` returns undefined
+- Data not shared between interceptors and handlers
+
+**Solutions:**
+
+**1. Use setState Correctly**
+```typescript
+// ✅ Good - Set state in interceptor
+app.addInterceptor({
+  type: InterceptorType.Request,
+  async intercept(ctx) {
+    setState(ctx, 'requestId', crypto.randomUUID());
+    return ctx.reqCtx.req;
+  }
+});
+
+// ✅ Good - Get state in handler
+app.GET('/test', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const requestId = getState(ctx, 'requestId');
+    return json({ requestId });
+  }
+})));
+```
+
+**2. Check Key Names**
+```typescript
+// ❌ Bad - Typo in key name
+setState(ctx, 'userId', '123');
+const id = getState(ctx, 'userID'); // undefined!
+
+// ✅ Good - Consistent naming
+const USER_ID_KEY = 'userId';
+setState(ctx, USER_ID_KEY, '123');
+const id = getState(ctx, USER_ID_KEY);
+```
+
+**3. Debug State**
+```typescript
+app.addInterceptor({
+  type: InterceptorType.Response,
+  async intercept(response, ctx) {
+    console.log('Context state:', Array.from(ctx.state.entries()));
+    return response;
+  }
+});
+```
+
+---
+
+### Database Errors
+
+**Problem:** Database queries failing
+
+**Symptoms:**
+- "D1_ERROR" messages
+- Connection timeouts
+- "database is locked"
+
+**Solutions:**
+
+**1. Check Binding Configuration**
+```toml
+# wrangler.toml
+[[d1_databases]]
+binding = "DB"
+database_name = "my-database"
+database_id = "your-database-id"
+```
+
+**2. Handle Database Errors**
+```typescript
+app.GET('/users', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    try {
+      const result = await env.DB.prepare(
+        'SELECT * FROM users'
+      ).all();
+
+      return json({ users: result.results });
+    } catch (error) {
+      console.error('Database error:', error);
+
+      if (error.message?.includes('no such table')) {
+        return serverError('Database not initialized');
+      }
+
+      return serverError('Database query failed');
+    }
+  }
+})));
+```
+
+**3. Use Prepared Statements**
+```typescript
+// ❌ Bad - SQL injection risk
+const query = `SELECT * FROM users WHERE email = '${email}'`;
+const result = await env.DB.prepare(query).all();
+
+// ✅ Good - Use bound parameters
+const result = await env.DB.prepare(
+  'SELECT * FROM users WHERE email = ?'
+).bind(email).all();
+```
+
+---
+
+### Rate Limiting Issues
+
+**Problem:** Rate limiting not working correctly
+
+**Symptoms:**
+- Requests not being rate limited
+- All requests being blocked
+- Incorrect rate limit headers
+
+**Solutions:**
+
+**1. Check Storage Configuration**
+```typescript
+import { rateLimitInterceptor, KVRateLimitStorage } from 'edge-master';
+
+// Make sure KV namespace is bound
+app.addInterceptor(rateLimitInterceptor({
+  limit: 100,
+  window: 60000,
+  storage: new KVRateLimitStorage(env.RATE_LIMIT_KV),
+  keyGenerator: (req) => {
+    const ip = req.headers.get('CF-Connecting-IP') || 'unknown';
+    console.log('Rate limiting IP:', ip);
+    return `ratelimit:${ip}`;
+  }
+}));
+```
+
+**2. Debug Rate Limit State**
+```typescript
+app.addInterceptor(rateLimitInterceptor({
+  limit: 100,
+  window: 60000,
+  storage: new KVRateLimitStorage(env.RATE_LIMIT_KV),
+  keyGenerator: (req) => {
+    const key = `ip:${req.headers.get('CF-Connecting-IP')}`;
+    console.log('Rate limit key:', key);
+    return key;
+  },
+  onLimit: (req) => {
+    console.log('Rate limit exceeded for:', req.url);
+    return json({
+      error: 'Rate Limit Exceeded'
+    }, { status: 429 });
+  }
+}));
+```
+
+---
+
+### Caching Issues
+
+**Problem:** Cache not working as expected
+
+**Symptoms:**
+- Responses not being cached
+- Stale data being served
+- Cache not invalidating
+
+**Solutions:**
+
+**1. Check Cache Configuration**
+```typescript
+import { cacheInterceptor } from 'edge-master';
+
+const { check, store } = cacheInterceptor({
+  ttl: 3600,
+  methods: ['GET', 'HEAD'], // Only cache safe methods
+  cacheKey: (req) => {
+    const url = new URL(req.url);
+    console.log('Cache key:', url.pathname);
+    return `cache:${url.pathname}`;
+  }
+});
+
+app.addInterceptor(check);
+app.addInterceptor(store);
+```
+
+**2. Verify Cache Headers**
+```typescript
+app.GET('/data', new RouteHandler(new Task({
+  do: async () => {
+    const data = await getData();
+
+    return json(data, {
+      headers: {
+        'Cache-Control': 'public, max-age=3600',
+        'Vary': 'Accept-Language'
+      }
+    });
+  }
+})));
+```
+
+**3. Debug Cache Hits/Misses**
+```typescript
+app.addInterceptor({
+  type: InterceptorType.Response,
+  async intercept(response, ctx) {
+    const cacheStatus = getState(ctx, 'cacheHit') ? 'HIT' : 'MISS';
+    console.log('Cache status:', cacheStatus, ctx.reqCtx.req.url);
+
+    const headers = new Headers(response.headers);
+    headers.set('X-Cache', cacheStatus);
+
+    return new Response(response.body, {
+      status: response.status,
+      headers
+    });
+  }
+});
+```
+
+---
+
+### Performance Issues
+
+**Problem:** Slow response times
+
+**Symptoms:**
+- CPU time limit exceeded
+- Timeouts
+- High latency
+
+**Solutions:**
+
+**1. Add Timing Logs**
+```typescript
+app.addInterceptor({
+  type: InterceptorType.Request,
+  async intercept(ctx) {
+    setState(ctx, 'startTime', Date.now());
+    return ctx.reqCtx.req;
+  }
+});
+
+app.addInterceptor({
+  type: InterceptorType.Response,
+  async intercept(response, ctx) {
+    const duration = Date.now() - getState(ctx, 'startTime');
+    console.log('Request duration:', duration, 'ms');
+
+    if (duration > 1000) {
+      console.warn('Slow request detected:', ctx.reqCtx.req.url);
+    }
+
+    return response;
+  }
+});
+```
+
+**2. Profile Database Queries**
+```typescript
+async function queryWithTiming(db, sql, params) {
+  const start = Date.now();
+  const result = await db.prepare(sql).bind(...params).all();
+  const duration = Date.now() - start;
+
+  console.log('Query time:', duration, 'ms', sql);
+
+  return result;
+}
+```
+
+**3. Check Bundle Size**
+```bash
+npx wrangler deploy --dry-run --outdir=dist
+ls -lh dist
+```
+
+---
+
+## Deployment Issues
+
+### Environment Variables Not Set
+
+**Problem:** Environment variables undefined in production
+
+**Solutions:**
+
+**1. Use Wrangler Secrets**
+```bash
+# Set secrets
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put API_KEY
+
+# List secrets
+npx wrangler secret list
+```
+
+**2. Check wrangler.toml**
+```toml
+[env.production]
+vars = { ENVIRONMENT = "production" }
+
+# Don't put secrets in wrangler.toml!
+```
+
+---
+
+### Binding Errors
+
+**Problem:** "env.X is undefined"
+
+**Solutions:**
+
+**1. Check wrangler.toml Bindings**
+```toml
+[[kv_namespaces]]
+binding = "MY_KV"
+id = "your-kv-id"
+
+[[d1_databases]]
+binding = "DB"
+database_id = "your-db-id"
+database_name = "my-database"
+```
+
+**2. Verify Binding Names**
+```typescript
+// Must match binding name in wrangler.toml
+export default {
+  fetch: (request: Request, env: any) => {
+    if (!env.MY_KV) {
+      throw new Error('MY_KV binding not found');
+    }
+    return app.handleRequest({ req: request, env });
+  }
+};
+```
+
+---
+
+## TypeScript Errors
+
+### Type Errors
+
+**Problem:** TypeScript compilation errors
+
+**Solutions:**
+
+**1. Install Type Definitions**
+```bash
+npm install -D @cloudflare/workers-types
+```
+
+**2. Configure tsconfig.json**
+```json
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ES2022",
+    "lib": ["ES2021"],
+    "types": ["@cloudflare/workers-types"],
+    "strict": true
+  }
+}
+```
+
+**3. Type Your Environment**
+```typescript
+interface Env {
+  JWT_SECRET: string;
+  DB: D1Database;
+  MY_KV: KVNamespace;
+}
+
+export default {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
+    return app.handleRequest({ req: request, env, ctx });
+  }
+};
+```
+
+---
+
+## Getting Help
+
+### Debugging Checklist
+
+- [ ] Check Wrangler logs
+- [ ] Enable debug logging
+- [ ] Verify route patterns
+- [ ] Check interceptor order
+- [ ] Validate environment variables
+- [ ] Test locally with `wrangler dev`
+- [ ] Check binding configuration
+- [ ] Review error messages carefully
+
+### Resources
+
+- [API Reference](/docs/API-Reference) - Complete API documentation
+- [Examples](/docs/Examples) - Working code examples
+- [GitHub Issues](https://github.com/sharif3271/edge-master/issues) - Report bugs
+- [Email Support](mailto:sharif3271@gmail.com) - Get help
+
+### Reporting Issues
+
+When reporting an issue, please include:
+
+1. **EdgeMaster version**: `npm list edge-master`
+2. **Node version**: `node --version`
+3. **Wrangler version**: `npx wrangler --version`
+4. **Minimal reproduction**: Simplest code that shows the issue
+5. **Expected behavior**: What you expected to happen
+6. **Actual behavior**: What actually happened
+7. **Error messages**: Full error stack traces
+8. **Environment**: Local dev or production?
+
+---
+
+**Still having issues?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)

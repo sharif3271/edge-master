@@ -1,3 +1,624 @@
 ---
 title: Data Models
+description: Type definitions and interfaces in EdgeMaster
 ---
+
+# Data Models
+
+Complete reference for all TypeScript types and interfaces used in EdgeMaster.
+
+## Core Types
+
+### Context
+
+The context object passed to tasks and interceptors.
+
+```typescript
+type Context = {
+  reqCtx: RequestHandlerArgs;
+  responder: (res: Response | PromiseLike<Response>) => void;
+  state: ContextState;
+}
+```
+
+**Properties:**
+- `reqCtx` - Request handler arguments (req, env, ctx)
+- `responder` - Function to send response
+- `state` - Map for sharing data between middleware and handlers
+
+**Usage:**
+```typescript
+new Task({
+  do: async (ctx: Context) => {
+    const { req, env } = ctx.reqCtx;
+    setState(ctx, 'userId', '123');
+    return json({ message: 'Hello' });
+  }
+})
+```
+
+### RequestHandlerArgs
+
+Arguments passed to request handler.
+
+```typescript
+type RequestHandlerArgs = {
+  req: Request;
+  env?: any;
+  ctx?: ExecutionContext;
+}
+```
+
+**Properties:**
+- `req` - The incoming Request object
+- `env` - Environment bindings (KV, Durable Objects, secrets, etc.)
+- `ctx` - ExecutionContext for waitUntil and passThroughOnException
+
+### ContextState
+
+Type for context state storage.
+
+```typescript
+type ContextState = Map<string, any>
+```
+
+Used internally by context helpers like `setState()` and `getState()`.
+
+---
+
+## Route Types
+
+### Route
+
+Internal route representation.
+
+```typescript
+type Route = {
+  matcher: IMatcher;
+  routeHandler: IRouteHandler;
+  priority?: number;
+}
+```
+
+**Properties:**
+- `matcher` - Function that determines if route matches
+- `routeHandler` - Handler to execute if matched
+- `priority` - Optional priority (higher = matched first, default: 0)
+
+### IMatcher
+
+Function that determines if a request matches a route.
+
+```typescript
+type IMatcher = (req: Request) => boolean | Promise<boolean>
+```
+
+**Example:**
+```typescript
+const adminMatcher: IMatcher = (req) => {
+  return new URL(req.url).pathname.startsWith('/admin');
+};
+
+app.addRoute(adminMatcher, adminHandler);
+```
+
+---
+
+## Handler Types
+
+### IRouteHandler
+
+Interface for route handlers.
+
+```typescript
+interface IRouteHandler {
+  handle(ctx: Context): Promise<Response>;
+}
+```
+
+**Implementation:**
+```typescript
+class RouteHandler implements IRouteHandler {
+  constructor(...tasks: Task[]) { }
+  async handle(ctx: Context): Promise<Response> { }
+}
+```
+
+### TaskConfig
+
+Configuration for Task constructor.
+
+```typescript
+type TaskConfig = {
+  do: (ctx: Context) => any | Promise<any>;
+  if?: (ctx: Context) => boolean | Promise<boolean>;
+  else?: (ctx: Context) => any | Promise<any>;
+}
+```
+
+**Properties:**
+- `do` - Main task function (required)
+- `if` - Optional condition to run task
+- `else` - Optional else branch if condition is false
+
+---
+
+## Interceptor Types
+
+### IInterceptor
+
+Base interface for all interceptors.
+
+```typescript
+interface IInterceptor {
+  type: InterceptorType;
+}
+```
+
+### InterceptorType
+
+Enum for interceptor types.
+
+```typescript
+enum InterceptorType {
+  Request = 0,
+  Response = 1
+}
+```
+
+### IRequestInterceptor
+
+Interface for request interceptors.
+
+```typescript
+interface IRequestInterceptor extends IInterceptor {
+  type: InterceptorType.Request;
+  intercept(ctx: Context): Promise<Request>;
+}
+```
+
+**Example Implementation:**
+```typescript
+const loggingInterceptor: IRequestInterceptor = {
+  type: InterceptorType.Request,
+  async intercept(ctx: Context): Promise<Request> {
+    console.log(`${ctx.reqCtx.req.method} ${ctx.reqCtx.req.url}`);
+    return ctx.reqCtx.req;
+  }
+};
+```
+
+### IResponseInterceptor
+
+Interface for response interceptors.
+
+```typescript
+interface IResponseInterceptor extends IInterceptor {
+  type: InterceptorType.Response;
+  intercept(response: Response, ctx: Context): Promise<Response>;
+}
+```
+
+**Example Implementation:**
+```typescript
+const headersInterceptor: IResponseInterceptor = {
+  type: InterceptorType.Response,
+  async intercept(response: Response, ctx: Context): Promise<Response> {
+    const headers = new Headers(response.headers);
+    headers.set('X-Custom-Header', 'value');
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
+  }
+};
+```
+
+---
+
+## CORS Types
+
+### CORSOptions
+
+Configuration for CORS interceptor.
+
+```typescript
+type CORSOptions = {
+  origin?: string | string[];
+  methods?: string[];
+  allowedHeaders?: string[];
+  exposedHeaders?: string[];
+  credentials?: boolean;
+  maxAge?: number;
+}
+```
+
+**Properties:**
+- `origin` - Allowed origins (default: `*`)
+- `methods` - Allowed HTTP methods (default: all methods)
+- `allowedHeaders` - Allowed request headers
+- `exposedHeaders` - Headers exposed to client
+- `credentials` - Allow credentials (default: false)
+- `maxAge` - Preflight cache duration in seconds
+
+**Example:**
+```typescript
+const corsOptions: CORSOptions = {
+  origin: ['https://example.com', 'https://app.example.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  maxAge: 86400
+};
+```
+
+---
+
+## Logging Types
+
+### LoggingOptions
+
+Configuration for logging interceptor.
+
+```typescript
+type LoggingOptions = {
+  level?: 'debug' | 'info' | 'warn' | 'error';
+  logTiming?: boolean;
+  logHeaders?: boolean;
+  logBody?: boolean;
+}
+```
+
+**Properties:**
+- `level` - Log level (default: 'info')
+- `logTiming` - Log request duration (default: false)
+- `logHeaders` - Log request/response headers (default: false)
+- `logBody` - Log request/response body (default: false)
+
+---
+
+## Cache Types
+
+### CacheOptions
+
+Configuration for cache interceptor.
+
+```typescript
+type CacheOptions = {
+  ttl: number;
+  methods?: string[];
+  varyHeaders?: string[];
+  cacheKey?: (req: Request) => string;
+}
+```
+
+**Properties:**
+- `ttl` - Time-to-live in seconds (required)
+- `methods` - HTTP methods to cache (default: ['GET', 'HEAD'])
+- `varyHeaders` - Headers to include in cache key
+- `cacheKey` - Custom cache key generator
+
+**Example:**
+```typescript
+const cacheOptions: CacheOptions = {
+  ttl: 3600,
+  methods: ['GET', 'HEAD'],
+  varyHeaders: ['Accept-Language'],
+  cacheKey: (req) => {
+    const url = new URL(req.url);
+    return `cache:${url.pathname}${url.search}`;
+  }
+};
+```
+
+---
+
+## Rate Limiting Types
+
+### RateLimitOptions
+
+Configuration for rate limit interceptor.
+
+```typescript
+type RateLimitOptions = {
+  limit: number;
+  window: number;
+  storage: IRateLimitStorage;
+  keyGenerator?: (req: Request) => string;
+  onLimit?: (req: Request) => Response;
+}
+```
+
+**Properties:**
+- `limit` - Maximum requests allowed (required)
+- `window` - Time window in milliseconds (required)
+- `storage` - Storage adapter for rate limit data (required)
+- `keyGenerator` - Custom key generator (default: IP address)
+- `onLimit` - Custom response when limit exceeded
+
+### IRateLimitStorage
+
+Interface for rate limit storage adapters.
+
+```typescript
+interface IRateLimitStorage {
+  get(key: string): Promise<RateLimitData | null>;
+  set(key: string, data: RateLimitData): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+```
+
+### RateLimitData
+
+Internal rate limit data structure.
+
+```typescript
+type RateLimitData = {
+  count: number;
+  resetAt: number;
+}
+```
+
+**Built-in Storage Adapters:**
+
+**MemoryRateLimitStorage** - In-memory storage (for testing):
+```typescript
+const storage = new MemoryRateLimitStorage();
+```
+
+**KVRateLimitStorage** - Cloudflare KV storage:
+```typescript
+const storage = new KVRateLimitStorage(env.RATE_LIMIT_KV);
+```
+
+---
+
+## JWT Types
+
+### JWTOptions
+
+Configuration for JWT interceptor.
+
+```typescript
+type JWTOptions = {
+  verify: (token: string, req: Request) => Promise<any> | any;
+  exclude?: string[];
+  extractToken?: (req: Request) => string | null;
+  onError?: (error: Error) => Response;
+}
+```
+
+**Properties:**
+- `verify` - Token verification function (required)
+- `exclude` - Paths to exclude from auth (glob patterns supported)
+- `extractToken` - Custom token extractor (default: Authorization header)
+- `onError` - Custom error response handler
+
+**Example:**
+```typescript
+const jwtOptions: JWTOptions = {
+  verify: async (token, req) => {
+    const payload = await verifyJWT(token, env.JWT_SECRET);
+    if (!payload) throw new Error('Invalid token');
+    return payload;
+  },
+  exclude: ['/auth/*', '/public/*'],
+  extractToken: (req) => {
+    const auth = req.headers.get('Authorization');
+    return auth?.replace('Bearer ', '') || null;
+  },
+  onError: (error) => {
+    return unauthorized(error.message);
+  }
+};
+```
+
+---
+
+## API Key Types
+
+### APIKeyOptions
+
+Configuration for API key interceptor.
+
+```typescript
+type APIKeyOptions = {
+  validate: (key: string, req: Request) => Promise<boolean> | boolean;
+  exclude?: string[];
+  headerName?: string;
+  onError?: (error: Error) => Response;
+}
+```
+
+**Properties:**
+- `validate` - Validation function (required)
+- `exclude` - Paths to exclude from auth
+- `headerName` - Header name for API key (default: 'X-API-Key')
+- `onError` - Custom error response handler
+
+---
+
+## OpenAPI Types
+
+### OpenAPISpec
+
+OpenAPI 3.0 specification structure.
+
+```typescript
+type OpenAPISpec = {
+  openapi: string;
+  info: OpenAPIInfo;
+  servers?: OpenAPIServer[];
+  paths: Record<string, OpenAPIPath>;
+  components?: {
+    schemas?: Record<string, OpenAPISchema>;
+    securitySchemes?: Record<string, OpenAPISecurityScheme>;
+  };
+  security?: OpenAPISecurity[];
+}
+```
+
+### OpenAPIInfo
+
+API information.
+
+```typescript
+type OpenAPIInfo = {
+  title: string;
+  version: string;
+  description?: string;
+  contact?: {
+    name?: string;
+    email?: string;
+    url?: string;
+  };
+}
+```
+
+### OpenAPIPath
+
+Path item with operations.
+
+```typescript
+type OpenAPIPath = {
+  get?: OpenAPIOperation;
+  post?: OpenAPIOperation;
+  put?: OpenAPIOperation;
+  delete?: OpenAPIOperation;
+  patch?: OpenAPIOperation;
+}
+```
+
+### OpenAPIOperation
+
+Operation details.
+
+```typescript
+type OpenAPIOperation = {
+  summary?: string;
+  description?: string;
+  parameters?: OpenAPIParameter[];
+  requestBody?: OpenAPIRequestBody;
+  responses: Record<string, OpenAPIResponse>;
+  security?: OpenAPISecurity[];
+  tags?: string[];
+}
+```
+
+---
+
+## Error Types
+
+### RequestParseError
+
+Custom error for request parsing failures.
+
+```typescript
+class RequestParseError extends Error {
+  constructor(message: string, public cause?: Error) {
+    super(message);
+    this.name = 'RequestParseError';
+  }
+}
+```
+
+**Usage:**
+```typescript
+try {
+  const body = await parseJSON(req);
+} catch (error) {
+  if (error instanceof RequestParseError) {
+    return badRequest('Invalid request body');
+  }
+  throw error;
+}
+```
+
+---
+
+## Utility Types
+
+### ResponseInit
+
+Standard Web API ResponseInit with optional fields.
+
+```typescript
+type ResponseInit = {
+  status?: number;
+  statusText?: string;
+  headers?: HeadersInit;
+}
+```
+
+**Example:**
+```typescript
+return json({ data: [] }, {
+  status: 200,
+  headers: {
+    'Cache-Control': 'max-age=3600',
+    'X-Custom-Header': 'value'
+  }
+});
+```
+
+### HeadersInit
+
+Standard Web API headers initialization.
+
+```typescript
+type HeadersInit =
+  | Headers
+  | Record<string, string>
+  | [string, string][]
+```
+
+---
+
+## Type Guards
+
+### isRequestInterceptor()
+
+Check if interceptor is a request interceptor.
+
+```typescript
+function isRequestInterceptor(interceptor: IInterceptor): interceptor is IRequestInterceptor {
+  return interceptor.type === InterceptorType.Request;
+}
+```
+
+### isResponseInterceptor()
+
+Check if interceptor is a response interceptor.
+
+```typescript
+function isResponseInterceptor(interceptor: IInterceptor): interceptor is IResponseInterceptor {
+  return interceptor.type === InterceptorType.Response;
+}
+```
+
+---
+
+## Generic Types
+
+### Promisable<T>
+
+Type that can be a value or a Promise of that value.
+
+```typescript
+type Promisable<T> = T | Promise<T>
+```
+
+Used internally for functions that accept both sync and async values.
+
+---
+
+## Next Steps
+
+- [API Reference](/docs/API-Reference) - Back to API overview
+- [Examples](/docs/Examples) - See types in action
+- [Core Concepts](/docs/Concepts) - Understand the architecture
+
+---
+
+**Questions?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)

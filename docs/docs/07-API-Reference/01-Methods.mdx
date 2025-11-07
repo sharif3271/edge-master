@@ -1,3 +1,543 @@
 ---
-title: Methods
+title: HTTP Methods
+description: HTTP method helpers and routing in EdgeMaster
 ---
+
+# HTTP Methods
+
+EdgeMaster provides convenient HTTP method helpers for defining routes with specific methods.
+
+## Overview
+
+Instead of manually checking `req.method`, you can use built-in method helpers:
+
+```typescript
+app.GET('/users', handler);
+app.POST('/users', handler);
+app.PUT('/users/:id', handler);
+app.DELETE('/users/:id', handler);
+app.PATCH('/users/:id', handler);
+app.HEAD('/users', handler);
+app.OPTIONS('/users', handler);
+```
+
+All method helpers support:
+- Path patterns with parameters (`:id`)
+- Wildcards (`*`)
+- Optional priority parameter
+
+---
+
+## GET
+
+Handle GET requests for retrieving data.
+
+```typescript
+GET(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example - List Resources:**
+```typescript
+app.GET('/users', new RouteHandler(new Task({
+  do: async () => {
+    const users = await getUsers();
+    return json({ users });
+  }
+})));
+```
+
+**Example - Get Resource by ID:**
+```typescript
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const user = await getUser(id);
+
+    if (!user) {
+      return notFound(`User ${id} not found`);
+    }
+
+    return json({ user });
+  }
+})));
+```
+
+**Example - With Query Parameters:**
+```typescript
+app.GET('/search', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const query = getQuery(req, 'q');
+    const page = parseInt(getQuery(req, 'page') || '1');
+    const limit = parseInt(getQuery(req, 'limit') || '10');
+
+    const results = await search(query, { page, limit });
+    return json({ results, page, limit });
+  }
+})));
+```
+
+---
+
+## POST
+
+Handle POST requests for creating new resources.
+
+```typescript
+POST(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example - Create Resource:**
+```typescript
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    if (!body.email || !body.name) {
+      return badRequest('Email and name are required');
+    }
+
+    const user = await createUser(body);
+    return json({ user }, { status: 201 });
+  }
+})));
+```
+
+**Example - With Validation:**
+```typescript
+import { z } from 'zod';
+
+const CreateUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+  age: z.number().min(0).max(120).optional()
+});
+
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+    const result = CreateUserSchema.safeParse(body);
+
+    if (!result.success) {
+      return json({
+        error: 'Validation Error',
+        details: result.error.errors
+      }, { status: 400 });
+    }
+
+    const user = await createUser(result.data);
+    return json({ user }, { status: 201 });
+  }
+})));
+```
+
+**Example - Form Data:**
+```typescript
+app.POST('/upload', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const formData = await parseFormData(req);
+    const file = formData.get('file');
+    const name = formData.get('name');
+
+    if (!file || !(file instanceof File)) {
+      return badRequest('File is required');
+    }
+
+    const url = await uploadFile(file, name as string);
+    return json({ url }, { status: 201 });
+  }
+})));
+```
+
+---
+
+## PUT
+
+Handle PUT requests for full resource updates.
+
+```typescript
+PUT(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example - Update Entire Resource:**
+```typescript
+app.PUT('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const body = await parseJSON(req);
+
+    const user = await getUser(id);
+    if (!user) {
+      return notFound(`User ${id} not found`);
+    }
+
+    const updatedUser = await updateUser(id, body);
+    return json({ user: updatedUser });
+  }
+})));
+```
+
+**Example - Replace with Validation:**
+```typescript
+app.PUT('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const body = await parseJSON(req);
+
+    // Validate all required fields for full update
+    if (!body.email || !body.name) {
+      return badRequest('Email and name are required for PUT');
+    }
+
+    const user = await replaceUser(id, body);
+    return json({ user });
+  }
+})));
+```
+
+---
+
+## PATCH
+
+Handle PATCH requests for partial resource updates.
+
+```typescript
+PATCH(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example - Partial Update:**
+```typescript
+app.PATCH('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const body = await parseJSON(req);
+
+    const user = await getUser(id);
+    if (!user) {
+      return notFound(`User ${id} not found`);
+    }
+
+    // Merge with existing data
+    const updatedUser = await updateUser(id, {
+      ...user,
+      ...body
+    });
+
+    return json({ user: updatedUser });
+  }
+})));
+```
+
+**Example - Specific Field Updates:**
+```typescript
+app.PATCH('/users/:id/profile', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/')[2];
+    const body = await parseJSON(req);
+
+    // Only allow specific fields
+    const allowedFields = ['name', 'bio', 'avatar'];
+    const updates = Object.keys(body)
+      .filter(key => allowedFields.includes(key))
+      .reduce((obj, key) => ({ ...obj, [key]: body[key] }), {});
+
+    const user = await patchUser(id, updates);
+    return json({ user });
+  }
+})));
+```
+
+---
+
+## DELETE
+
+Handle DELETE requests for removing resources.
+
+```typescript
+DELETE(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example - Delete Resource:**
+```typescript
+app.DELETE('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+
+    const user = await getUser(id);
+    if (!user) {
+      return notFound(`User ${id} not found`);
+    }
+
+    await deleteUser(id);
+    return json({ message: 'User deleted successfully' });
+  }
+})));
+```
+
+**Example - Soft Delete:**
+```typescript
+app.DELETE('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+
+    // Soft delete - mark as deleted instead of removing
+    const user = await updateUser(id, {
+      deleted: true,
+      deletedAt: new Date().toISOString()
+    });
+
+    return json({ message: 'User deleted', user });
+  }
+})));
+```
+
+**Example - With Authorization:**
+```typescript
+app.DELETE('/posts/:id', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+    const id = new URL(ctx.reqCtx.req.url).pathname.split('/').pop();
+
+    const post = await getPost(id);
+    if (!post) {
+      return notFound(`Post ${id} not found`);
+    }
+
+    // Check ownership
+    if (post.authorId !== user.id && user.role !== 'admin') {
+      return forbidden('You can only delete your own posts');
+    }
+
+    await deletePost(id);
+    return json({ message: 'Post deleted' });
+  }
+})));
+```
+
+---
+
+## HEAD
+
+Handle HEAD requests (same as GET but without body).
+
+```typescript
+HEAD(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example - Check Resource Existence:**
+```typescript
+app.HEAD('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const exists = await userExists(id);
+
+    if (!exists) {
+      return new Response(null, { status: 404 });
+    }
+
+    return new Response(null, {
+      status: 200,
+      headers: {
+        'X-Resource-Exists': 'true',
+        'Last-Modified': await getUserLastModified(id)
+      }
+    });
+  }
+})));
+```
+
+---
+
+## OPTIONS
+
+Handle OPTIONS requests for CORS preflight.
+
+```typescript
+OPTIONS(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example - Manual CORS Handling:**
+```typescript
+app.OPTIONS('/api/*', new RouteHandler(new Task({
+  do: async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400'
+      }
+    });
+  }
+})));
+```
+
+**Note:** It's recommended to use the `corsInterceptor()` instead of manually handling OPTIONS requests.
+
+---
+
+## Method Patterns
+
+### RESTful CRUD
+
+Complete CRUD operations for a resource:
+
+```typescript
+const userHandler = {
+  list: new RouteHandler(new Task({
+    do: async () => json({ users: await getUsers() })
+  })),
+
+  get: new RouteHandler(new Task({
+    do: async ({ req }) => {
+      const id = new URL(req.url).pathname.split('/').pop();
+      const user = await getUser(id);
+      return user ? json({ user }) : notFound();
+    }
+  })),
+
+  create: new RouteHandler(new Task({
+    do: async ({ req }) => {
+      const body = await parseJSON(req);
+      const user = await createUser(body);
+      return json({ user }, { status: 201 });
+    }
+  })),
+
+  update: new RouteHandler(new Task({
+    do: async ({ req }) => {
+      const id = new URL(req.url).pathname.split('/').pop();
+      const body = await parseJSON(req);
+      const user = await updateUser(id, body);
+      return json({ user });
+    }
+  })),
+
+  delete: new RouteHandler(new Task({
+    do: async ({ req }) => {
+      const id = new URL(req.url).pathname.split('/').pop();
+      await deleteUser(id);
+      return json({ message: 'User deleted' });
+    }
+  }))
+};
+
+app.GET('/users', userHandler.list);
+app.GET('/users/:id', userHandler.get);
+app.POST('/users', userHandler.create);
+app.PUT('/users/:id', userHandler.update);
+app.DELETE('/users/:id', userHandler.delete);
+```
+
+### Nested Resources
+
+```typescript
+// Posts for a specific user
+app.GET('/users/:userId/posts', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const userId = new URL(req.url).pathname.split('/')[2];
+    const posts = await getPostsByUser(userId);
+    return json({ posts });
+  }
+})));
+
+// Create post for a user
+app.POST('/users/:userId/posts', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const userId = new URL(req.url).pathname.split('/')[2];
+    const body = await parseJSON(req);
+    const post = await createPost({ ...body, userId });
+    return json({ post }, { status: 201 });
+  }
+})));
+```
+
+### Versioned APIs
+
+```typescript
+app.group('/api', (api) => {
+  api.group('/v1', (v1) => {
+    v1.GET('/users', usersV1Handler);
+    v1.POST('/users', createUserV1Handler);
+  });
+
+  api.group('/v2', (v2) => {
+    v2.GET('/users', usersV2Handler);
+    v2.POST('/users', createUserV2Handler);
+  });
+});
+```
+
+---
+
+## Priority Routing
+
+Control route matching order with priorities:
+
+```typescript
+// Specific routes should have higher priority
+app.GET('/users/me', meHandler, 100);
+app.GET('/users/admin', adminHandler, 90);
+app.GET('/users/:id', userByIdHandler, 10);
+
+// Without priorities, /users/me might match /users/:id first
+```
+
+**Example with Wildcards:**
+```typescript
+// Specific routes first
+app.GET('/api/health', healthHandler, 100);
+app.GET('/api/status', statusHandler, 100);
+
+// Catch-all last
+app.GET('/api/*', apiCatchAllHandler, 0);
+```
+
+---
+
+## Method Chaining
+
+All method helpers return `EdgeController` for chaining:
+
+```typescript
+app
+  .GET('/users', listHandler)
+  .POST('/users', createHandler)
+  .GET('/users/:id', getHandler)
+  .PUT('/users/:id', updateHandler)
+  .DELETE('/users/:id', deleteHandler);
+```
+
+---
+
+## Custom Methods
+
+For custom HTTP methods, use `addRoute()` with a matcher:
+
+```typescript
+import { httpMethod, and, pathMatcher } from 'edge-master';
+
+// CONNECT method
+app.addRoute(
+  and(httpMethod('CONNECT'), pathMatcher('/tunnel')),
+  tunnelHandler
+);
+
+// TRACE method
+app.addRoute(
+  httpMethod('TRACE'),
+  traceHandler
+);
+```
+
+---
+
+## Next Steps
+
+- [API Reference](/docs/API-Reference) - Complete API documentation
+- [Error Handling](/docs/API-Reference/Error-Handling) - Handle errors properly
+- [Examples](/docs/Examples) - See methods in action
+
+---
+
+**Questions?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)

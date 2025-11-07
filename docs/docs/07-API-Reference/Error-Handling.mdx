@@ -1,3 +1,717 @@
 ---
 title: Error Handling
+description: Error handling patterns and best practices in EdgeMaster
 ---
+
+# Error Handling
+
+Learn how to handle errors gracefully in your EdgeMaster applications.
+
+## Overview
+
+EdgeMaster provides multiple layers of error handling:
+1. **Built-in handlers** - Default 404 and 500 responses
+2. **Custom handlers** - `onNotFound()` and `onError()` methods
+3. **Try-catch** - Standard exception handling in tasks
+4. **Response helpers** - Convenient error response functions
+
+---
+
+## Default Error Handling
+
+EdgeMaster automatically handles common error scenarios:
+
+### 404 Not Found
+
+When no route matches, EdgeMaster returns a default 404 response:
+
+```json
+{
+  "error": "Not Found"
+}
+```
+
+### 500 Internal Server Error
+
+When an unhandled exception occurs, EdgeMaster returns a 500 response:
+
+```json
+{
+  "error": "Internal Server Error"
+}
+```
+
+---
+
+## Custom Error Handlers
+
+### onNotFound()
+
+Customize the 404 response for unmatched routes.
+
+```typescript
+app.onNotFound(async ({ req }) => {
+  const url = new URL(req.url);
+
+  return json({
+    error: 'Not Found',
+    message: `The route ${url.pathname} does not exist`,
+    path: url.pathname,
+    suggestions: getSuggestions(url.pathname)
+  }, { status: 404 });
+});
+```
+
+**Advanced Example with Logging:**
+```typescript
+app.onNotFound(async (ctx) => {
+  const { req } = ctx.reqCtx;
+  const url = new URL(req.url);
+
+  // Log 404 for analytics
+  console.warn(`404: ${req.method} ${url.pathname}`);
+
+  // Provide helpful response
+  return json({
+    error: 'Not Found',
+    path: url.pathname,
+    timestamp: new Date().toISOString()
+  }, { status: 404 });
+});
+```
+
+### onError()
+
+Handle uncaught exceptions globally.
+
+```typescript
+app.onError(async (error, ctx) => {
+  const { req } = ctx.reqCtx;
+
+  // Log error with context
+  console.error('Error:', {
+    message: error.message,
+    stack: error.stack,
+    url: req.url,
+    method: req.method
+  });
+
+  // Return safe error response
+  return json({
+    error: 'Internal Server Error',
+    message: error.message,
+    requestId: crypto.randomUUID()
+  }, { status: 500 });
+});
+```
+
+**Production Example:**
+```typescript
+app.onError(async (error, ctx) => {
+  const { req, env } = ctx.reqCtx;
+  const requestId = crypto.randomUUID();
+
+  // Log to external service
+  await logToSentry(error, {
+    requestId,
+    url: req.url,
+    method: req.method,
+    userAgent: req.headers.get('User-Agent')
+  });
+
+  // Return safe error (don't expose internals)
+  return json({
+    error: 'Internal Server Error',
+    requestId,
+    message: env.DEBUG ? error.message : 'An error occurred'
+  }, { status: 500 });
+});
+```
+
+---
+
+## Error Response Helpers
+
+EdgeMaster provides convenient functions for common error responses.
+
+### notFound()
+
+Return a 404 Not Found response.
+
+```typescript
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const user = await getUser(id);
+
+    if (!user) {
+      return notFound(`User ${id} not found`);
+    }
+
+    return json({ user });
+  }
+})));
+```
+
+### badRequest()
+
+Return a 400 Bad Request response.
+
+```typescript
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    if (!body.email || !body.name) {
+      return badRequest('Email and name are required');
+    }
+
+    const user = await createUser(body);
+    return json({ user }, { status: 201 });
+  }
+})));
+```
+
+### unauthorized()
+
+Return a 401 Unauthorized response.
+
+```typescript
+app.GET('/profile', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+
+    if (!user) {
+      return unauthorized('Authentication required');
+    }
+
+    return json({ user });
+  }
+})));
+```
+
+### forbidden()
+
+Return a 403 Forbidden response.
+
+```typescript
+app.DELETE('/admin/users/:id', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+
+    if (user?.role !== 'admin') {
+      return forbidden('Admin access required');
+    }
+
+    // Delete user logic...
+    return json({ message: 'User deleted' });
+  }
+})));
+```
+
+### serverError()
+
+Return a 500 Internal Server Error response.
+
+```typescript
+app.GET('/data', new RouteHandler(new Task({
+  do: async () => {
+    try {
+      const data = await fetchExternalAPI();
+      return json({ data });
+    } catch (error) {
+      console.error('External API error:', error);
+      return serverError('Failed to fetch data');
+    }
+  }
+})));
+```
+
+---
+
+## Error Handling Patterns
+
+### Try-Catch in Tasks
+
+Handle errors within individual tasks:
+
+```typescript
+app.POST('/process', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    try {
+      const body = await parseJSON(req);
+      const result = await processData(body);
+      return json({ result });
+    } catch (error) {
+      if (error instanceof RequestParseError) {
+        return badRequest('Invalid JSON in request body');
+      }
+      if (error instanceof ValidationError) {
+        return badRequest(error.message);
+      }
+      throw error; // Let global handler deal with it
+    }
+  }
+})));
+```
+
+### Validation Errors
+
+Handle validation errors gracefully:
+
+```typescript
+import { z } from 'zod';
+
+const UserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+  age: z.number().min(0).max(120)
+});
+
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    // Validate with Zod
+    const result = UserSchema.safeParse(body);
+
+    if (!result.success) {
+      return json({
+        error: 'Validation Error',
+        details: result.error.errors
+      }, { status: 400 });
+    }
+
+    const user = await createUser(result.data);
+    return json({ user }, { status: 201 });
+  }
+})));
+```
+
+### Interceptor Error Handling
+
+Handle errors in interceptors:
+
+```typescript
+import { jwtInterceptor, unauthorized } from 'edge-master';
+
+app.addInterceptor(jwtInterceptor({
+  verify: async (token) => {
+    const payload = await verifyJWT(token, env.JWT_SECRET);
+    if (!payload) {
+      throw new Error('Invalid token');
+    }
+    return payload;
+  },
+  onError: (error) => {
+    return unauthorized(error.message);
+  }
+}));
+```
+
+### Database Errors
+
+Handle database errors:
+
+```typescript
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+
+    try {
+      const user = await env.DB.prepare(
+        'SELECT * FROM users WHERE id = ?'
+      ).bind(id).first();
+
+      if (!user) {
+        return notFound(`User ${id} not found`);
+      }
+
+      return json({ user });
+    } catch (error) {
+      console.error('Database error:', error);
+      return serverError('Database query failed');
+    }
+  }
+})));
+```
+
+### External API Errors
+
+Handle external API failures:
+
+```typescript
+app.GET('/external/data', new RouteHandler(new Task({
+  do: async () => {
+    try {
+      const response = await fetch('https://api.example.com/data', {
+        signal: AbortSignal.timeout(5000) // 5s timeout
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      return json({ data });
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return serverError('External API timeout');
+      }
+      console.error('External API error:', error);
+      return serverError('Failed to fetch external data');
+    }
+  }
+})));
+```
+
+---
+
+## Error Logging
+
+### Basic Logging
+
+```typescript
+app.onError(async (error, ctx) => {
+  console.error('Error occurred:', {
+    message: error.message,
+    stack: error.stack,
+    url: ctx.reqCtx.req.url,
+    method: ctx.reqCtx.req.method,
+    timestamp: new Date().toISOString()
+  });
+
+  return serverError('An error occurred');
+});
+```
+
+### Structured Logging
+
+```typescript
+function logError(error: Error, context: any) {
+  console.error(JSON.stringify({
+    level: 'error',
+    message: error.message,
+    stack: error.stack,
+    context,
+    timestamp: new Date().toISOString()
+  }));
+}
+
+app.onError(async (error, ctx) => {
+  const { req, env } = ctx.reqCtx;
+
+  logError(error, {
+    url: req.url,
+    method: req.method,
+    headers: Object.fromEntries(req.headers),
+    environment: env.ENVIRONMENT
+  });
+
+  return serverError();
+});
+```
+
+### External Logging Services
+
+```typescript
+async function sendToSentry(error: Error, context: any) {
+  await fetch('https://sentry.io/api/...', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      error: error.message,
+      stack: error.stack,
+      context
+    })
+  });
+}
+
+app.onError(async (error, ctx) => {
+  // Send to Sentry (non-blocking)
+  ctx.reqCtx.ctx?.waitUntil(
+    sendToSentry(error, {
+      url: ctx.reqCtx.req.url,
+      method: ctx.reqCtx.req.method
+    })
+  );
+
+  return serverError();
+});
+```
+
+---
+
+## Custom Error Classes
+
+Create custom error types for your application:
+
+```typescript
+class ValidationError extends Error {
+  constructor(public field: string, message: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+class AuthenticationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthenticationError';
+  }
+}
+
+class RateLimitError extends Error {
+  constructor(public retryAfter: number) {
+    super('Rate limit exceeded');
+    this.name = 'RateLimitError';
+  }
+}
+
+// Use in tasks
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    if (!body.email) {
+      throw new ValidationError('email', 'Email is required');
+    }
+
+    // ... create user
+  }
+})));
+
+// Handle in error handler
+app.onError(async (error, ctx) => {
+  if (error instanceof ValidationError) {
+    return json({
+      error: 'Validation Error',
+      field: error.field,
+      message: error.message
+    }, { status: 400 });
+  }
+
+  if (error instanceof AuthenticationError) {
+    return unauthorized(error.message);
+  }
+
+  if (error instanceof RateLimitError) {
+    return json({
+      error: 'Rate Limit Exceeded',
+      retryAfter: error.retryAfter
+    }, {
+      status: 429,
+      headers: {
+        'Retry-After': error.retryAfter.toString()
+      }
+    });
+  }
+
+  return serverError();
+});
+```
+
+---
+
+## Error Recovery Patterns
+
+### Retry Logic
+
+```typescript
+async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return response;
+
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      }
+    } catch (error) {
+      if (i === retries - 1) throw error;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
+app.GET('/data', new RouteHandler(new Task({
+  do: async () => {
+    try {
+      const response = await fetchWithRetry('https://api.example.com/data');
+      const data = await response.json();
+      return json({ data });
+    } catch (error) {
+      return serverError('Failed after retries');
+    }
+  }
+})));
+```
+
+### Fallback Responses
+
+```typescript
+app.GET('/config', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    try {
+      // Try to get from primary source
+      const config = await env.KV.get('config', 'json');
+      if (config) return json({ config });
+
+      // Fallback to default config
+      return json({ config: getDefaultConfig() });
+    } catch (error) {
+      // Last resort: hardcoded config
+      return json({ config: { version: '1.0.0' } });
+    }
+  }
+})));
+```
+
+### Circuit Breaker Pattern
+
+```typescript
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailure = 0;
+  private readonly threshold = 5;
+  private readonly timeout = 60000; // 1 minute
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.isOpen()) {
+      throw new Error('Circuit breaker open');
+    }
+
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+
+  private isOpen(): boolean {
+    if (this.failures >= this.threshold) {
+      const now = Date.now();
+      if (now - this.lastFailure < this.timeout) {
+        return true;
+      }
+      this.reset();
+    }
+    return false;
+  }
+
+  private onSuccess() {
+    this.failures = 0;
+  }
+
+  private onFailure() {
+    this.failures++;
+    this.lastFailure = Date.now();
+  }
+
+  private reset() {
+    this.failures = 0;
+  }
+}
+
+const breaker = new CircuitBreaker();
+
+app.GET('/external', new RouteHandler(new Task({
+  do: async () => {
+    try {
+      const data = await breaker.execute(() =>
+        fetch('https://api.example.com/data').then(r => r.json())
+      );
+      return json({ data });
+    } catch (error) {
+      return serverError('Service temporarily unavailable');
+    }
+  }
+})));
+```
+
+---
+
+## Best Practices
+
+### 1. Always Log Errors
+
+```typescript
+app.onError(async (error, ctx) => {
+  console.error('Error:', error);
+  return serverError();
+});
+```
+
+### 2. Don't Expose Internals
+
+```typescript
+// ❌ Bad
+return json({ error: error.stack }, { status: 500 });
+
+// ✅ Good
+return serverError('An error occurred');
+```
+
+### 3. Use Appropriate Status Codes
+
+```typescript
+// Client errors (4xx)
+if (!authenticated) return unauthorized();
+if (!authorized) return forbidden();
+if (!found) return notFound();
+if (!valid) return badRequest();
+
+// Server errors (5xx)
+if (dbError) return serverError();
+```
+
+### 4. Provide Request IDs
+
+```typescript
+app.onError(async (error, ctx) => {
+  const requestId = crypto.randomUUID();
+
+  console.error('Error:', { requestId, error });
+
+  return json({
+    error: 'Internal Server Error',
+    requestId
+  }, { status: 500 });
+});
+```
+
+### 5. Handle Async Errors
+
+```typescript
+// ❌ Bad - unhandled promise rejection
+app.GET('/data', new RouteHandler(new Task({
+  do: () => fetch('...').then(r => r.json()) // No error handling!
+})));
+
+// ✅ Good
+app.GET('/data', new RouteHandler(new Task({
+  do: async () => {
+    try {
+      const response = await fetch('...');
+      return json(await response.json());
+    } catch (error) {
+      return serverError();
+    }
+  }
+})));
+```
+
+---
+
+## Next Steps
+
+- [API Reference](/docs/API-Reference) - Complete API documentation
+- [Best Practices](/docs/Best-Practices) - Learn recommended patterns
+- [Examples](/docs/Examples) - See error handling in action
+
+---
+
+**Questions?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)

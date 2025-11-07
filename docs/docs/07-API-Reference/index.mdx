@@ -1,7 +1,806 @@
 ---
 title: API Reference
+description: Complete API documentation for EdgeMaster
 ---
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+# API Reference
+
+Complete reference for all EdgeMaster classes, methods, and utilities.
+
+## Quick Navigation
+
+### Core Classes
+- [EdgeController](#edgecontroller) - Main application orchestrator
+- [RouteHandler](#routehandler) - Route handler with task execution
+- [Task](#task) - Individual units of work
+
+### Helper Functions
+
+**Response Helpers:**
+- [json()](#json) - JSON response
+- [text()](#text) - Text response
+- [html()](#html) - HTML response
+- [redirect()](#redirect) - Redirect response
+- [notFound()](#notfound) - 404 response
+- [badRequest()](#badrequest) - 400 response
+- [unauthorized()](#unauthorized) - 401 response
+- [forbidden()](#forbidden) - 403 response
+- [serverError()](#servererror) - 500 response
+
+**Request Helpers:**
+- [parseJSON()](#parsejson) - Parse JSON body
+- [parseFormData()](#parseformdata) - Parse form data
+- [parseText()](#parsetext) - Parse text body
+- [parseQuery()](#parsequery) - Parse query parameters
+- [getQuery()](#getquery) - Get single query parameter
+
+**Context Helpers:**
+- [setState()](#setstate) - Set context state
+- [getState()](#getstate) - Get context state
+- [hasState()](#hasstate) - Check if state exists
+- [deleteState()](#deletestate) - Delete state value
+
+### Interceptors
+
+- [corsInterceptor()](#corsinterceptor) - CORS support
+- [loggingInterceptor()](#logginginterceptor) - Request/response logging
+- [cacheInterceptor()](#cacheinterceptor) - Cloudflare Cache API
+- [rateLimitInterceptor()](#ratelimitinterceptor) - Rate limiting
+- [jwtInterceptor()](#jwtinterceptor) - JWT authentication
+- [apiKeyInterceptor()](#apikeyinterceptor) - API key authentication
+
+---
+
+## EdgeController
+
+The main orchestrator for your edge application.
+
+### Constructor
+
+```typescript
+const app = new EdgeController();
+```
+
+### HTTP Method Helpers
+
+#### GET()
+
+Register a GET route.
+
+```typescript
+GET(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Parameters:**
+- `pattern` - URL pattern (e.g., `/users`, `/users/:id`)
+- `handler` - RouteHandler instance
+- `priority` - Optional priority (higher = matched first)
+
+**Example:**
+```typescript
+app.GET('/users', new RouteHandler(new Task({
+  do: async () => json({ users: [] })
+})));
+```
+
+#### POST()
+
+Register a POST route.
+
+```typescript
+POST(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Example:**
+```typescript
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+    return json({ user: body }, { status: 201 });
+  }
+})));
+```
+
+#### PUT()
+
+Register a PUT route.
+
+```typescript
+PUT(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+#### DELETE()
+
+Register a DELETE route.
+
+```typescript
+DELETE(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+#### PATCH()
+
+Register a PATCH route.
+
+```typescript
+PATCH(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+#### HEAD()
+
+Register a HEAD route.
+
+```typescript
+HEAD(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+#### OPTIONS()
+
+Register an OPTIONS route.
+
+```typescript
+OPTIONS(pattern: string, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+### Route Management
+
+#### addRoute()
+
+Add a custom route with matcher.
+
+```typescript
+addRoute(matcher: IMatcher, handler: IRouteHandler, priority?: number): EdgeController
+```
+
+**Parameters:**
+- `matcher` - Function that returns true if route matches
+- `handler` - RouteHandler instance
+- `priority` - Optional priority (higher = matched first)
+
+**Example:**
+```typescript
+app.addRoute(
+  (req) => new URL(req.url).pathname.startsWith('/admin'),
+  adminHandler,
+  100
+);
+```
+
+#### group()
+
+Group routes under a common prefix.
+
+```typescript
+group(prefix: string, configure: (group: EdgeController) => void): EdgeController
+```
+
+**Example:**
+```typescript
+app.group('/api/v1', (api) => {
+  api.GET('/users', listUsersHandler);
+  api.POST('/users', createUserHandler);
+  api.GET('/posts', listPostsHandler);
+});
+
+// Creates routes:
+// GET  /api/v1/users
+// POST /api/v1/users
+// GET  /api/v1/posts
+```
+
+**Nested Groups:**
+```typescript
+app.group('/api', (api) => {
+  api.group('/v1', (v1) => {
+    v1.GET('/users', usersV1Handler);
+  });
+  api.group('/v2', (v2) => {
+    v2.GET('/users', usersV2Handler);
+  });
+});
+```
+
+### Interceptor Management
+
+#### addInterceptor()
+
+Add request or response interceptor.
+
+```typescript
+addInterceptor(interceptor: IInterceptor): EdgeController
+```
+
+**Example:**
+```typescript
+import { corsInterceptor, loggingInterceptor } from 'edge-master';
+
+app.addInterceptor(corsInterceptor({ origin: '*' }));
+
+const { request, response } = loggingInterceptor();
+app.addInterceptor(request);
+app.addInterceptor(response);
+```
+
+### Error Handling
+
+#### onNotFound()
+
+Set custom 404 handler.
+
+```typescript
+onNotFound(handler: (ctx: Context) => Response | Promise<Response>): EdgeController
+```
+
+**Example:**
+```typescript
+app.onNotFound(async ({ req }) => {
+  const url = new URL(req.url);
+  return json({
+    error: 'Not Found',
+    path: url.pathname
+  }, { status: 404 });
+});
+```
+
+#### onError()
+
+Set custom error handler.
+
+```typescript
+onError(handler: (error: Error, ctx: Context) => Response | Promise<Response>): EdgeController
+```
+
+**Example:**
+```typescript
+app.onError(async (error, ctx) => {
+  console.error('Error:', error);
+  return json({
+    error: 'Internal Server Error',
+    message: error.message
+  }, { status: 500 });
+});
+```
+
+### Request Handling
+
+#### handleRequest()
+
+Process incoming request.
+
+```typescript
+handleRequest(args: RequestHandlerArgs): Promise<Response>
+```
+
+**Parameters:**
+```typescript
+type RequestHandlerArgs = {
+  req: Request;
+  env?: any;
+  ctx?: ExecutionContext;
+}
+```
+
+**Example:**
+```typescript
+export default {
+  fetch: (request: Request, env: any, ctx: ExecutionContext) => {
+    return app.handleRequest({ req: request, env, ctx });
+  }
+};
+```
+
+---
+
+## RouteHandler
+
+Manages sequential task execution for routes.
+
+### Constructor
+
+```typescript
+new RouteHandler(...tasks: Task[])
+```
+
+**Example:**
+```typescript
+const handler = new RouteHandler(
+  new Task({
+    do: async ({ req }) => {
+      // Task 1
+      console.log('Validating request...');
+      return req;
+    }
+  }),
+  new Task({
+    do: async () => {
+      // Task 2
+      return json({ message: 'Success' });
+    }
+  })
+);
+```
+
+### Methods
+
+#### handle()
+
+Execute all tasks sequentially.
+
+```typescript
+handle(ctx: Context): Promise<Response>
+```
+
+---
+
+## Task
+
+Individual units of work with optional conditions.
+
+### Constructor
+
+```typescript
+new Task(config: {
+  do: (ctx: Context) => any | Promise<any>;
+  if?: (ctx: Context) => boolean | Promise<boolean>;
+  else?: (ctx: Context) => any | Promise<any>;
+})
+```
+
+**Parameters:**
+- `do` - Main task function
+- `if` - Optional condition (task runs if true)
+- `else` - Optional else branch (runs if condition is false)
+
+### Basic Task
+
+```typescript
+new Task({
+  do: async () => json({ message: 'Hello' })
+})
+```
+
+### Conditional Task
+
+```typescript
+new Task({
+  if: async ({ req }) => {
+    const user = getState(ctx, 'user');
+    return user?.role === 'admin';
+  },
+  do: async () => json({ data: 'admin data' }),
+  else: async () => unauthorized('Admin only')
+})
+```
+
+---
+
+## Response Helpers
+
+### json()
+
+Create JSON response.
+
+```typescript
+json(data: any, init?: ResponseInit): Response
+```
+
+**Example:**
+```typescript
+return json({ users: [] });
+return json({ error: 'Invalid' }, { status: 400 });
+```
+
+### text()
+
+Create text response.
+
+```typescript
+text(data: string, init?: ResponseInit): Response
+```
+
+### html()
+
+Create HTML response.
+
+```typescript
+html(data: string, init?: ResponseInit): Response
+```
+
+### redirect()
+
+Create redirect response.
+
+```typescript
+redirect(location: string, status: number = 302): Response
+```
+
+**Example:**
+```typescript
+return redirect('/new-path');
+return redirect('/login', 301);
+```
+
+### notFound()
+
+Create 404 response.
+
+```typescript
+notFound(message: string = 'Not Found'): Response
+```
+
+### badRequest()
+
+Create 400 response.
+
+```typescript
+badRequest(message: string = 'Bad Request'): Response
+```
+
+### unauthorized()
+
+Create 401 response.
+
+```typescript
+unauthorized(message: string = 'Unauthorized'): Response
+```
+
+### forbidden()
+
+Create 403 response.
+
+```typescript
+forbidden(message: string = 'Forbidden'): Response
+```
+
+### serverError()
+
+Create 500 response.
+
+```typescript
+serverError(message: string = 'Internal Server Error'): Response
+```
+
+---
+
+## Request Helpers
+
+### parseJSON()
+
+Parse JSON request body.
+
+```typescript
+parseJSON<T = any>(req: Request): Promise<T>
+```
+
+**Example:**
+```typescript
+const body = await parseJSON(req);
+console.log(body.name, body.email);
+```
+
+**Throws:** `RequestParseError` if parsing fails.
+
+### parseFormData()
+
+Parse form data.
+
+```typescript
+parseFormData(req: Request): Promise<FormData>
+```
+
+### parseText()
+
+Parse text body.
+
+```typescript
+parseText(req: Request): Promise<string>
+```
+
+### parseQuery()
+
+Get all query parameters.
+
+```typescript
+parseQuery(req: Request): URLSearchParams
+```
+
+**Example:**
+```typescript
+const params = parseQuery(req);
+const page = params.get('page') || '1';
+const limit = params.get('limit') || '10';
+```
+
+### getQuery()
+
+Get single query parameter.
+
+```typescript
+getQuery(req: Request, key: string): string | null
+```
+
+**Example:**
+```typescript
+const search = getQuery(req, 'q');
+const page = getQuery(req, 'page') || '1';
+```
+
+---
+
+## Context Helpers
+
+### setState()
+
+Set value in context state.
+
+```typescript
+setState<T = any>(ctx: Context, key: string, value: T): void
+```
+
+**Example:**
+```typescript
+setState(ctx, 'user', { id: '123', name: 'Alice' });
+setState(ctx, 'requestId', crypto.randomUUID());
+```
+
+### getState()
+
+Get value from context state.
+
+```typescript
+getState<T = any>(ctx: Context, key: string): T | undefined
+```
+
+**Example:**
+```typescript
+const user = getState<User>(ctx, 'user');
+if (user) {
+  console.log(user.name);
+}
+```
+
+### hasState()
+
+Check if state key exists.
+
+```typescript
+hasState(ctx: Context, key: string): boolean
+```
+
+### deleteState()
+
+Delete state value.
+
+```typescript
+deleteState(ctx: Context, key: string): boolean
+```
+
+---
+
+## Interceptors
+
+### corsInterceptor()
+
+Add CORS support.
+
+```typescript
+corsInterceptor(options?: {
+  origin?: string | string[];
+  methods?: string[];
+  allowedHeaders?: string[];
+  exposedHeaders?: string[];
+  credentials?: boolean;
+  maxAge?: number;
+}): IRequestInterceptor
+```
+
+**Example:**
+```typescript
+app.addInterceptor(corsInterceptor({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
+```
+
+### loggingInterceptor()
+
+Add request/response logging.
+
+```typescript
+loggingInterceptor(options?: {
+  level?: 'debug' | 'info' | 'warn' | 'error';
+  logTiming?: boolean;
+  logHeaders?: boolean;
+  logBody?: boolean;
+}): {
+  request: IRequestInterceptor;
+  response: IResponseInterceptor;
+}
+```
+
+**Example:**
+```typescript
+const { request, response } = loggingInterceptor({
+  level: 'info',
+  logTiming: true
+});
+app.addInterceptor(request);
+app.addInterceptor(response);
+```
+
+### cacheInterceptor()
+
+Add Cloudflare Cache API support.
+
+```typescript
+cacheInterceptor(options: {
+  ttl: number;
+  methods?: string[];
+  varyHeaders?: string[];
+  cacheKey?: (req: Request) => string;
+}): {
+  check: IRequestInterceptor;
+  store: IResponseInterceptor;
+}
+```
+
+**Example:**
+```typescript
+const { check, store } = cacheInterceptor({
+  ttl: 3600,
+  methods: ['GET', 'HEAD']
+});
+app.addInterceptor(check);
+app.addInterceptor(store);
+```
+
+### rateLimitInterceptor()
+
+Add rate limiting.
+
+```typescript
+rateLimitInterceptor(options: {
+  limit: number;
+  window: number;
+  storage: IRateLimitStorage;
+  keyGenerator?: (req: Request) => string;
+  onLimit?: (req: Request) => Response;
+}): IRequestInterceptor
+```
+
+**Example:**
+```typescript
+import { MemoryRateLimitStorage } from 'edge-master';
+
+app.addInterceptor(rateLimitInterceptor({
+  limit: 100,
+  window: 60000,
+  storage: new MemoryRateLimitStorage()
+}));
+```
+
+### jwtInterceptor()
+
+Add JWT authentication.
+
+```typescript
+jwtInterceptor(options: {
+  verify: (token: string, req: Request) => Promise<any> | any;
+  exclude?: string[];
+  extractToken?: (req: Request) => string | null;
+  onError?: (error: Error) => Response;
+}): IRequestInterceptor
+```
+
+**Example:**
+```typescript
+app.addInterceptor(jwtInterceptor({
+  verify: async (token) => verifyJWT(token, env.JWT_SECRET),
+  exclude: ['/auth/login', '/auth/register']
+}));
+```
+
+### apiKeyInterceptor()
+
+Add API key authentication.
+
+```typescript
+apiKeyInterceptor(options: {
+  validate: (key: string, req: Request) => Promise<boolean> | boolean;
+  exclude?: string[];
+  headerName?: string;
+  onError?: (error: Error) => Response;
+}): IRequestInterceptor
+```
+
+---
+
+## Utility Functions
+
+### pathMatcher()
+
+Create path pattern matcher.
+
+```typescript
+pathMatcher(pattern: string): IMatcher
+```
+
+**Supports:**
+- Exact paths: `/users`
+- Parameters: `/users/:id`
+- Wildcards: `/assets/*`
+
+### httpMethod()
+
+Create HTTP method matcher.
+
+```typescript
+httpMethod(method: string): IMatcher
+```
+
+### and()
+
+Combine matchers with AND logic.
+
+```typescript
+and(...matchers: IMatcher[]): IMatcher
+```
+
+**Example:**
+```typescript
+app.addRoute(
+  and(httpMethod('GET'), pathMatcher('/admin/*')),
+  adminHandler
+);
+```
+
+### or()
+
+Combine matchers with OR logic.
+
+```typescript
+or(...matchers: IMatcher[]): IMatcher
+```
+
+---
+
+## Types & Interfaces
+
+For complete type definitions, see the [Data Models](/docs/API-Reference/Data-Models) section.
+
+---
+
+## Error Classes
+
+### RequestParseError
+
+Thrown when request parsing fails.
+
+```typescript
+class RequestParseError extends Error {
+  constructor(message: string, public cause?: Error);
+}
+```
+
+**Example:**
+```typescript
+try {
+  const body = await parseJSON(req);
+} catch (error) {
+  if (error instanceof RequestParseError) {
+    return badRequest('Invalid JSON');
+  }
+}
+```
+
+---
+
+## Next Steps
+
+- [View Examples](/docs/Examples) - See real-world usage
+- [Best Practices](/docs/Best-Practices) - Learn recommended patterns
+- [Core Concepts](/docs/Concepts) - Understand the architecture
+
+---
+
+**Questions?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)

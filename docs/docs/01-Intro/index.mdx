@@ -1,25 +1,268 @@
 ---
 title: Introduction
+description: Welcome to EdgeMaster - A lightweight microframework for edge computing
 ---
 
-EdgeMaster is a microframework specifically crafted for cloud based environments such,
-as Cloudflare Workers or serverless functions.
-It provides a set of tools to streamline the creation of your edge applications making the process more seamless and effective. 
-The user friendly nature of EdgeMaster guarantees reliability.
-Accelerated development speed.
+# Introduction to EdgeMaster
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+EdgeMaster is a **lightweight microframework** specifically crafted for edge computing environments such as Cloudflare Workers, AWS Lambda@Edge, and other serverless platforms. It provides a robust set of tools to streamline the creation of your edge applications, making development seamless, efficient, and maintainable.
+
+## What is EdgeMaster?
+
+EdgeMaster is designed to solve the complexity problem that arises when managing large-scale edge applications. As your Worker code grows, organizing routes, handling middleware, and maintaining code quality becomes challenging. EdgeMaster provides:
+
+- **Structured Routing** - Organize routes with HTTP method helpers and grouping
+- **Interceptor Pattern** - Middleware for request/response transformation
+- **Task-Based Architecture** - Reusable, composable units of work
+- **Type Safety** - Full TypeScript support with strict typing
+- **Zero Dependencies** - No production dependencies, minimal bundle size (~14KB)
+
+---
 
 ## Why EdgeMaster?
 
+### 🚀 **Complexity Management**
+
+As edge applications grow, managing complexity becomes critical. EdgeMaster helps you:
+- Organize routes into logical groups
+- Share common logic through reusable tasks
+- Apply cross-cutting concerns with interceptors
+- Maintain clean, testable code
+
+### ⚡ **Performance First**
+
+Built specifically for edge environments:
+- **Zero dependencies** - No bloat, fast cold starts
+- **Minimal overhead** - Only ~290 lines of core code
+- **Optimized for Workers** - Designed for Cloudflare's V8 isolates
+- **Efficient routing** - Priority-based route matching
+
+### 🛡️ **Production Ready**
+
+Enterprise-grade features out of the box:
+- **JWT Authentication** - Built-in interceptors for auth
+- **Rate Limiting** - Protect your APIs from abuse
+- **Caching** - Cloudflare Cache API integration
+- **CORS** - Easy cross-origin resource sharing
+- **Error Handling** - Graceful error boundaries
+
+### 💎 **Developer Experience**
+
+Designed for developer happiness:
+- **Full TypeScript** - Complete type definitions
+- **Chainable API** - Fluent, readable code
+- **Clear Patterns** - Predictable, explicit behavior
+- **Great Docs** - Comprehensive guides and examples
+
+---
+
 ## Key Features
 
-## Use Cases?
+### Core Features
+
+- ✅ **HTTP Method Helpers** - `GET()`, `POST()`, `PUT()`, `DELETE()`, `PATCH()`
+- ✅ **Route Grouping** - Organize routes under common prefixes
+- ✅ **Flexible Matchers** - Pattern matching, wildcards, custom logic
+- ✅ **Priority Routing** - Control route execution order
+- ✅ **Task System** - Composable, reusable route handlers
+- ✅ **Interceptors** - Request/response middleware
+- ✅ **Context State** - Share data across middleware and handlers
+- ✅ **Error Boundaries** - Custom error and 404 handlers
+
+### Built-in Helpers
+
+**Response Helpers:**
+- `json()`, `text()`, `html()` - Quick responses
+- `redirect()`, `notFound()`, `badRequest()` - Status codes
+- `unauthorized()`, `forbidden()`, `serverError()` - Error responses
+
+**Request Helpers:**
+- `parseJSON()`, `parseFormData()`, `parseText()` - Body parsing
+- `parseQuery()`, `getQuery()` - URL parameters
+- `parseArrayBuffer()`, `parseBlob()` - Binary data
+
+### Built-in Interceptors
+
+- 🔒 **Authentication** - JWT and API key interceptors
+- 🚦 **Rate Limiting** - Per-IP or custom rate limiting
+- 📝 **Logging** - Configurable request/response logging
+- 🔄 **CORS** - Cross-origin resource sharing
+- ⚡ **Caching** - Cloudflare Cache API integration
+
+---
+
+## Use Cases
+
+### API Development
+
+Perfect for building REST APIs:
+```typescript
+app.group('/api/v1', (api) => {
+  api.GET('/users', listUsers);
+  api.POST('/users', createUser);
+  api.PUT('/users/:id', updateUser);
+  api.DELETE('/users/:id', deleteUser);
+});
+```
+
+### Microservices Gateway
+
+Route requests to multiple backend services:
+```typescript
+app.group('/service-a', (group) => {
+  group.addRoute(() => true, proxyToServiceA);
+});
+
+app.group('/service-b', (group) => {
+  group.addRoute(() => true, proxyToServiceB);
+});
+```
+
+### Authentication Proxy
+
+Add authentication to any service:
+```typescript
+app.addInterceptor(jwtInterceptor({
+  verify: (token) => verifyJWT(token, secret),
+  exclude: ['/public/*']
+}));
+```
+
+### Edge Caching Layer
+
+Cache responses at the edge:
+```typescript
+const { check, store } = cacheInterceptor({ ttl: 3600 });
+app.addInterceptor(check);
+app.addInterceptor(store);
+```
+
+### A/B Testing
+
+Split traffic for experiments:
+```typescript
+app.GET('/feature', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const variant = getVariant(ctx.req);
+    return json({ feature: variant === 'B' ? 'new' : 'old' });
+  }
+})));
+```
+
+---
+
+## Quick Example
+
+Here's a complete API with authentication and CORS in under 50 lines:
+
+```typescript
+import {
+  EdgeController,
+  RouteHandler,
+  Task,
+  json,
+  parseJSON,
+  corsInterceptor,
+  jwtInterceptor,
+  badRequest,
+} from 'edge-master';
+
+const app = new EdgeController();
+
+// Add CORS
+app.addInterceptor(corsInterceptor({ origin: '*' }));
+
+// Add JWT auth (exclude /login)
+app.addInterceptor(jwtInterceptor({
+  verify: async (token) => verifyToken(token, env.JWT_SECRET),
+  exclude: ['/auth/*']
+}));
+
+// Public route
+app.POST('/auth/login', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const { email, password } = await parseJSON(req);
+    const token = await generateToken(email);
+    return json({ token });
+  }
+})));
+
+// Protected route
+app.GET('/profile', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+    return json({ user });
+  }
+})));
+
+// Export
+export default {
+  fetch: (req: Request, env: any) => app.handleRequest({ req, env })
+};
+```
+
+---
+
+## Comparison
+
+### vs Express.js
+
+| Feature | EdgeMaster | Express |
+|---------|------------|---------|
+| Runtime | Edge workers | Node.js |
+| Dependencies | 0 | Many |
+| Bundle Size | ~14KB | ~200KB |
+| Cold Start | <1ms | Slower |
+
+### vs Hono
+
+| Feature | EdgeMaster | Hono |
+|---------|------------|------|
+| Architecture | Task-based | Middleware |
+| Complexity Handling | Excellent | Good |
+| Bundle Size | ~14KB | ~12KB |
+
+### vs itty-router
+
+| Feature | EdgeMaster | itty-router |
+|---------|------------|-------------|
+| Structure | High | Minimal |
+| Features | Rich | Basic |
+| Bundle Size | ~14KB | ~450 bytes |
+| Best For | Complex apps | Simple routes |
+
+---
 
 ## Staying Informed
 
+- 📚 [Read the Docs](/docs/getting-started) - Complete documentation
+- 💡 [View Examples](/docs/Examples) - Real-world examples
+- 🐛 [GitHub Issues](https://github.com/sharif3271/edge-master/issues) - Report bugs
+- ⭐ [Star on GitHub](https://github.com/sharif3271/edge-master) - Show support
+
+---
+
 ## Something Missing?
 
+If you find issues with the documentation or have suggestions:
 
+1. [Open an issue](https://github.com/sharif3271/edge-master/issues) on GitHub
+2. [Submit a pull request](https://github.com/sharif3271/edge-master/pulls) with improvements
+3. Email us at [sharif3271@gmail.com](mailto:sharif3271@gmail.com)
+
+We appreciate your feedback and contributions!
+
+---
+
+## Next Steps
+
+Ready to get started?
+
+1. 📦 [Installation](/docs/intstallation%20and%20setup) - Install EdgeMaster
+2. 🚀 [Getting Started](/docs/getting-started) - Build your first app
+3. 📖 [Core Concepts](/docs/Concepts) - Understand the architecture
+4. 💻 [API Reference](/docs/API-Reference) - Complete API docs
+
+---
+
+**Welcome to EdgeMaster!** Let's build amazing edge applications together. 🎉

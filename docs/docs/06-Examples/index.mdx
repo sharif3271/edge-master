@@ -1,7 +1,150 @@
 ---
 title: Examples
+description: Real-world EdgeMaster examples and use cases
 ---
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+# EdgeMaster Examples
+
+Learn by example! We provide 10 comprehensive examples covering common use cases.
+
+## 🚀 Quick Start Examples
+
+### 1. **API Gateway**
+Complete REST API with CRUD operations, pagination, and validation.
+
+**Features:**
+- HTTP method helpers
+- Request/response parsing
+- Input validation
+- Error handling
+- CORS support
+
+[View Example →](https://github.com/sharif3271/edge-master/tree/main/example/01-api-gateway)
+
+### 2. **JWT Authentication**
+Full authentication system with JWT tokens, protected routes, and RBAC.
+
+**Features:**
+- User registration & login
+- Token generation with `jose`
+- Protected routes
+- Role-based access control
+- Token refresh
+
+[View Example →](https://github.com/sharif3271/edge-master/tree/main/example/02-authentication)
+
+---
+
+## 📚 All Examples
+
+| Example | Description | Status |
+|---------|-------------|--------|
+| [01-api-gateway](https://github.com/sharif3271/edge-master/tree/main/example/01-api-gateway) | Complete REST API | ✅ Full code |
+| [02-authentication](https://github.com/sharif3271/edge-master/tree/main/example/02-authentication) | JWT auth system | ✅ Full code |
+| [03-caching](https://github.com/sharif3271/edge-master/tree/main/example/03-caching) | Cache strategies | 📖 Documented |
+| [04-microservices-proxy](https://github.com/sharif3271/edge-master/tree/main/example/04-microservices-proxy) | Service routing | 📖 Documented |
+| [05-security](https://github.com/sharif3271/edge-master/tree/main/example/05-security) | Rate limiting & security | 📖 Documented |
+| [06-ab-testing](https://github.com/sharif3271/edge-master/tree/main/example/06-ab-testing) | A/B testing & feature flags | 📖 Documented |
+| [07-image-optimization](https://github.com/sharif3271/edge-master/tree/main/example/07-image-optimization) | Image transformation | 📖 Documented |
+| [08-workers-kv](https://github.com/sharif3271/edge-master/tree/main/example/08-workers-kv) | KV storage integration | 📖 Documented |
+| [09-workers-ai](https://github.com/sharif3271/edge-master/tree/main/example/09-workers-ai) | AI integration (2025) | 📖 Documented |
+| [10-rpc-bindings](https://github.com/sharif3271/edge-master/tree/main/example/10-rpc-bindings) | RPC service bindings (2025) | 📖 Documented |
+
+---
+
+## 🎯 Learning Paths
+
+### For Beginners
+1. Start with [API Gateway](https://github.com/sharif3271/edge-master/tree/main/example/01-api-gateway)
+2. Add [Authentication](https://github.com/sharif3271/edge-master/tree/main/example/02-authentication)
+3. Implement [Security](https://github.com/sharif3271/edge-master/tree/main/example/05-security)
+
+### For API Developers
+1. [API Gateway](https://github.com/sharif3271/edge-master/tree/main/example/01-api-gateway) - REST patterns
+2. [Authentication](https://github.com/sharif3271/edge-master/tree/main/example/02-authentication) - Secure APIs
+3. [Caching](https://github.com/sharif3271/edge-master/tree/main/example/03-caching) - Performance
+4. [Security](https://github.com/sharif3271/edge-master/tree/main/example/05-security) - Rate limiting
+
+### For Microservices
+1. [Microservices Proxy](https://github.com/sharif3271/edge-master/tree/main/example/04-microservices-proxy) - Service routing
+2. [RPC Bindings](https://github.com/sharif3271/edge-master/tree/main/example/10-rpc-bindings) - Inter-service communication
+
+### For Advanced Features
+1. [Workers KV](https://github.com/sharif3271/edge-master/tree/main/example/08-workers-kv) - Persistent storage
+2. [Workers AI](https://github.com/sharif3271/edge-master/tree/main/example/09-workers-ai) - AI integration
+3. [A/B Testing](https://github.com/sharif3271/edge-master/tree/main/example/06-ab-testing) - Feature flags
+
+---
+
+## 💡 Quick Snippets
+
+### Simple Hello World
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+const app = new EdgeController();
+
+app.GET('/hello', new RouteHandler(new Task({
+  do: async () => json({ message: 'Hello World!' })
+})));
+
+export default {
+  fetch: (req: Request) => app.handleRequest({ req })
+};
+```
+
+### With CORS and Logging
+
+```typescript
+import { corsInterceptor, loggingInterceptor } from 'edge-master';
+
+app.addInterceptor(corsInterceptor({ origin: '*' }));
+
+const { request, response } = loggingInterceptor();
+app.addInterceptor(request);
+app.addInterceptor(response);
+```
+
+### Protected Route
+
+```typescript
+import { jwtInterceptor, getState } from 'edge-master';
+
+app.addInterceptor(jwtInterceptor({
+  verify: (token) => verifyJWT(token, secret),
+  exclude: ['/public/*']
+}));
+
+app.GET('/profile', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+    return json({ user });
+  }
+})));
+```
+
+---
+
+## 🔗 External Resources
+
+- [GitHub Examples Directory](https://github.com/sharif3271/edge-master/tree/main/example)
+- [Cloudflare Workers Examples](https://developers.cloudflare.com/workers/examples/)
+- [EdgeMaster GitHub](https://github.com/sharif3271/edge-master)
+
+---
+
+## 📝 Contributing Examples
+
+Have a great example? We'd love to include it!
+
+1. Fork the repository
+2. Create your example in `example/XX-example-name/`
+3. Include README, code, and configuration
+4. Submit a pull request
+
+[Contribution Guide](/docs/Contribution)
+
+---
+
+**Need help?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)

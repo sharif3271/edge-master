@@ -25,221 +25,436 @@
   <a href="https://github.com/sharif3271/edge-master/issues" target="_blank">
     <img src="https://img.shields.io/github/issues/sharif3271/edge-master?style=flat-square" alt="open issues" />
   </a>
-  <a href="" target="_blank">
-    <img src="" alt="" />
-  </a>
 </p>
 
-<a href="https://em.asanflow.com/" target="_blank">EdgeMaster</a> is a flexible microframework designed to handle routing and intercept requests/responses in cloud based environments such, as Cloudflare Workers or serverless functions. It offers a robust set of tools that can greatly simplify the development of your edge applications.
+## **The Edge Complexity Problem**
+
+As edge applications grow, managing complexity becomes critical. What starts as a simple Worker with a few routes quickly becomes an unmaintainable mess of if-else statements, scattered middleware, and duplicated logic. EdgeMaster solves this by providing a **structured, scalable architecture** specifically designed for edge computing.
+
+### **Why EdgeMaster?**
+
+<a href="https://em.asanflow.com/" target="_blank">EdgeMaster</a> is a lightweight microframework purpose-built for edge environments like Cloudflare Workers, AWS Lambda@Edge, and other serverless platforms. It brings structure to chaos by providing:
+
+- **🎯 Structured Routing** - HTTP method helpers, grouping, and priority-based matching
+- **🔄 Interceptor Pattern** - Middleware for request/response transformation
+- **📦 Task-Based Architecture** - Reusable, composable units of work
+- **⚡ Zero Dependencies** - No bloat, minimal bundle size (~14 KB)
+- **🛡️ Production Ready** - Built-in auth, rate limiting, caching, and error handling
+- **💎 Type Safe** - Full TypeScript support with strict typing
 
 ---
 
-## Table of Contents
+## **Quick Start**
 
-- [Features](#features)
-- [Installation](#installation)
-- [Getting Started](#getting-started)
-- [Routing](#routing)
-- [Interceptors](#interceptors)
-- [Examples](#examples)
-- [Contributing](#contributing)
-- [Credits](#credits)
-
----
-
-## Features
-
-- **Lightweight**: EdgeMaster is incredibly small in size, allowing you to keep your application's footprint minimal.
-- **Fully-Typed**: Enjoy the benefits of TypeScript with complete type definitions.
-- **Simplified Routing**: Create concise and expressive routes with ease.
-- **Interception Support**: Implement interceptors for Request/Response effortlessly, whether built-in or custom.
-- **Platform-Agnostic**: Functions seamlessly in diverse cloud-based environments such as Cloudflare Workers and serverless platforms, while providing full compatibility with the Fetch API.
-- **Error Handling**: Gracefully handle errors and define error responses.
-
----
-
-## Installation
-
-To get started with EdgeMaster, you can install it via npm:
+### Installation
 
 ```bash
 npm install edge-master
 ```
 
+### Hello World
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+const app = new EdgeController();
+
+app.GET('/hello', new RouteHandler(new Task({
+  do: async () => json({ message: 'Hello World!' })
+})));
+
+export default {
+  fetch: (req: Request) => app.handleRequest({ req })
+};
+```
+
+That's it! You've built a working edge application.
+
 ---
 
-## Getting Started
+## **Core Features**
 
-Here's a simple example of setting up EdgeMaster in a Cloudflare Worker module:
+### 🎯 **HTTP Method Helpers**
 
-```javascript
+Clean, expressive routing with built-in method helpers:
 
+```typescript
+app.GET('/users', listHandler);
+app.POST('/users', createHandler);
+app.PUT('/users/:id', updateHandler);
+app.DELETE('/users/:id', deleteHandler);
+```
+
+### 📦 **Route Grouping**
+
+Organize routes hierarchically:
+
+```typescript
+app.group('/api/v1', (v1) => {
+  v1.group('/users', (users) => {
+    users.GET('/', listUsers);
+    users.GET('/:id', getUser);
+    users.POST('/', createUser);
+  });
+});
+```
+
+### 🔄 **Powerful Interceptors**
+
+Apply cross-cutting concerns with middleware:
+
+```typescript
+import { corsInterceptor, jwtInterceptor, rateLimitInterceptor } from 'edge-master';
+
+// CORS
+app.addInterceptor(corsInterceptor({ origin: '*' }));
+
+// Authentication
+app.addInterceptor(jwtInterceptor({
+  verify: (token) => verifyJWT(token, env.JWT_SECRET),
+  exclude: ['/auth/*', '/public/*']
+}));
+
+// Rate Limiting
+app.addInterceptor(rateLimitInterceptor({
+  limit: 100,
+  window: 60000,
+  storage: new KVRateLimitStorage(env.KV)
+}));
+```
+
+### 📝 **Request & Response Helpers**
+
+Convenient utilities for common operations:
+
+```typescript
+import { parseJSON, json, badRequest, notFound } from 'edge-master';
+
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    if (!body.email || !body.name) {
+      return badRequest('Email and name are required');
+    }
+
+    const user = await createUser(body);
+    return json({ user }, { status: 201 });
+  }
+})));
+```
+
+### 🎭 **Context State Management**
+
+Share data between interceptors and handlers:
+
+```typescript
+import { setState, getState } from 'edge-master';
+
+// In interceptor
+app.addInterceptor({
+  type: InterceptorType.Request,
+  async intercept(ctx) {
+    setState(ctx, 'user', await authenticateUser(ctx.reqCtx.req));
+    return ctx.reqCtx.req;
+  }
+});
+
+// In handler
+app.GET('/profile', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+    return json({ user });
+  }
+})));
+```
+
+---
+
+## **Real-World Example**
+
+Here's a complete REST API with authentication, validation, and error handling:
+
+```typescript
 import {
   EdgeController,
   RouteHandler,
   Task,
-  routePattern,
-  initResponse
+  json,
+  parseJSON,
+  corsInterceptor,
+  jwtInterceptor,
+  getState,
+  badRequest,
+  notFound,
+  unauthorized
 } from 'edge-master';
 
-// Cloudflare Worker
-export default {
-  async fetch(req) {
-    return EdgeApp.handleRequest({ req });
-  },
-}
+const app = new EdgeController();
 
-const EdgeApp = new EdgeController();
+// Add interceptors
+app.addInterceptor(corsInterceptor({ origin: '*' }));
+app.addInterceptor(jwtInterceptor({
+  verify: (token) => verifyJWT(token, env.JWT_SECRET),
+  exclude: ['/auth/*']
+}));
 
-EdgeApp.addRoute(
-  routePattern('*/users/profile/*'),
-  new RouteHandler().registerTask(new Task({
-    do: async ({ req }) => {
-      const tempRes = await fetch(req);
-      // some transform on response
-      return new Response(tempRes.body, {
-        ...tempRes,
-        headers: {
-          ...tempRes.headers,
-          'My-Res-Status': 'transformed'
-        }
-      });
+// Public routes
+app.POST('/auth/login', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const { email, password } = await parseJSON(req);
+    const token = await generateToken(email, password);
+
+    if (!token) {
+      return unauthorized('Invalid credentials');
     }
-  }))
-);
 
-EdgeApp.addRoute(
-  routePattern('*'),
-  new RouteHandler().registerTask(initResponse())
-);
+    return json({ token });
+  }
+})));
 
+// Protected routes
+app.GET('/users', new RouteHandler(new Task({
+  do: async () => {
+    const users = await getUsers();
+    return json({ users });
+  }
+})));
 
-```
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
 
----
+    if (!body.email || !body.name) {
+      return badRequest('Email and name are required');
+    }
 
-## Routing
+    const user = await createUser(body);
+    return json({ user }, { status: 201 });
+  }
+})));
 
-EdgeMaster streamlines routing in your application with built-in route matchers, and we're continually adding more. If your project requires custom, intricate route matching, you can easily implement it with the flexibility our framework offers. At EdgeMaster, we aim to make complex route matching straightforward and accessible for developers.
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const user = await getUser(id);
 
-```javascript
-import {
-  EdgeController,
-  routePattern, // You can use wildcards and optional segments to create flexible route patterns.
-  pathStartWith,
-  urlStartWith,
-} from 'edge-master';
+    if (!user) {
+      return notFound(`User ${id} not found`);
+    }
 
-const App = new EdgeController();
+    return json({ user });
+  }
+})));
 
-App.addRoute(routePattern('*/user/*/info'), {/** RouteHandler of UserInfo  */});
-
-App.addRoute(pathStartWith('/api/v2/user'), {/** RouteHandler of User  */});
-
-App.addRoute(urlStartWith('https://origin.com/api/v2/user'), {/** RouteHandler of User  */});
-
-// This handler will be executed when none of the other registered routes don't match the request.
-App.addRoute(() => true, {/** RouteHandler of Default or Non-matching routes */});
-
-```
-
-### Custom Route Matcher
-
-EdgeMaster allows you to define your own route matcher.
-
-```javascript
-
-type Matcher = (req: Request) => boolean;
-
-const onlyGetMethod = (matcher: Matcher): Matcher => {
-  return (req) => (req.method === "GET" && matcher(req))
-}
-
-App.addRoute(
-  onlyGetMethod(routePattern('*/some/*/wildcard')),
-  {/** RouteHandler */ }
-);
-
-```
-
----
-
-## Interceptors
-
-EdgeMaster provides a convenient way to intercept incoming requests and outgoing responses using interceptors. Interceptors can be used for tasks such as authentication, logging, and response modification.
-
-### Request Interceptors
-
-Request interceptors are executed before your route handlers, allowing you to modify the incoming request.
-
-```javascript
-const authenticationInterceptor = {
-  type: InterceptorType.Request,
-  async intercept(context) {
-    // Check authentication and modify the request if needed
-    const { reqCtx: { req }, responder } = context;
-    if (/** req is ok*/)
-      return req;
-    else
-      // responder will break all next steps and respond instnatly the request.
-      responder(new Response('Not Authenticated', { status: 401 }))
-  },
+// Export
+export default {
+  fetch: (request: Request, env: any) => app.handleRequest({ req: request, env })
 };
-
-router.addInterceptor(authenticationInterceptor);
-```
-
-### Response Interceptors
-
-Response interceptors are executed after your route handlers, enabling you to modify the response before it's sent back to the client.
-
-```javascript
-const loggingInterceptor = {
-  type: InterceptorType.Response,
-  async intercept(context) {
-    // Log the response or make changes before sending it
-    const { res } = context;
-    // ...
-    return res;
-  },
-};
-
-router.addInterceptor(loggingInterceptor);
 ```
 
 ---
 
-## Examples
+## **Built-in Interceptors**
 
-Check out more examples and use cases in the [EdgeMaster Examples](https://github.com/sharif3271/edge-master/tree/main/example).
+EdgeMaster includes production-ready interceptors:
+
+### 🔒 **Authentication**
+- **JWT Interceptor** - Token verification with exclude patterns
+- **API Key Interceptor** - API key validation
+
+### 🚦 **Rate Limiting**
+- Memory or KV-backed storage
+- Per-IP or custom key generation
+- Configurable limits and windows
+
+### 📝 **Logging**
+- Request/response logging
+- Configurable log levels
+- Timing information
+
+### 🔄 **CORS**
+- Full CORS support
+- Configurable origins, methods, headers
+- Automatic OPTIONS handling
+
+### ⚡ **Caching**
+- Cloudflare Cache API integration
+- Configurable TTL and cache keys
+- Vary header support
+
+---
+
+## **Documentation**
+
+- **[Getting Started](https://em.asanflow.com/docs/getting-started)** - Build your first app
+- **[Core Concepts](https://em.asanflow.com/docs/Concepts)** - Understand the architecture
+- **[API Reference](https://em.asanflow.com/docs/API-Reference)** - Complete API docs
+- **[Examples](https://em.asanflow.com/docs/Examples)** - Real-world examples
+- **[Best Practices](https://em.asanflow.com/docs/Best-Practices)** - Recommended patterns
+- **[Performance Optimization](https://em.asanflow.com/docs/Performance-Optimization)** - Optimize your app
+- **[Troubleshooting](https://em.asanflow.com/docs/Troubleshooting)** - Debug common issues
 
 ---
 
-## Contributing
+## **Examples & Use Cases**
 
-We welcome contributions from the community to make EdgeMaster even better.
-If you'd like to contribute, please follow these steps:
+We provide 10 comprehensive examples covering common patterns:
 
-1. Fork the repository.
-2. Install dependencies `npm install`.
-3. Start the test runner `npm run test`.
-4. Add your code and tests.
-5. Commit your changes && Submit a pull request.
-
-We'll review your contribution and, if
-
- everything looks good, merge it into the main codebase.
-
----
-
-## Credits
-
-EdgeMaster is developed and maintained by [Sharif Eiri](https://github.com/sharif3271/). It's inspired by the simplicity of microframeworks like Express.js and is built to be highly compatible with cloud-based serverless environments. Special thanks to the open-source community for their contributions and support.
+1. **[API Gateway](https://github.com/sharif3271/edge-master/tree/main/example/01-api-gateway)** - Complete REST API with CRUD operations
+2. **[JWT Authentication](https://github.com/sharif3271/edge-master/tree/main/example/02-authentication)** - Full auth system with RBAC
+3. **[Caching Strategies](https://github.com/sharif3271/edge-master/tree/main/example/03-caching)** - Edge caching patterns
+4. **[Microservices Proxy](https://github.com/sharif3271/edge-master/tree/main/example/04-microservices-proxy)** - Service routing
+5. **[Security](https://github.com/sharif3271/edge-master/tree/main/example/05-security)** - Rate limiting & validation
+6. **[A/B Testing](https://github.com/sharif3271/edge-master/tree/main/example/06-ab-testing)** - Feature flags
+7. **[Image Optimization](https://github.com/sharif3271/edge-master/tree/main/example/07-image-optimization)** - Image transformation
+8. **[Workers KV](https://github.com/sharif3271/edge-master/tree/main/example/08-workers-kv)** - KV storage integration
+9. **[Workers AI](https://github.com/sharif3271/edge-master/tree/main/example/09-workers-ai)** - AI integration
+10. **[RPC Bindings](https://github.com/sharif3271/edge-master/tree/main/example/10-rpc-bindings)** - Service-to-service communication
 
 ---
 
-Thank you for choosing EdgeMaster for your edge application development! If you have any questions or encounter issues, please don't hesitate to reach out on our [GitHub repository](https://github.com/sharif3271/edge-master).
+## **Why Choose EdgeMaster?**
 
-Happy coding! 🚀
+### **vs Express.js**
+- ✅ Purpose-built for edge environments
+- ✅ Zero dependencies vs many
+- ✅ ~14 KB bundle vs ~200 KB
+- ✅ <1ms cold starts vs slower
+
+### **vs Hono**
+- ✅ Task-based architecture for complexity management
+- ✅ Built-in production features (auth, rate limiting, caching)
+- ✅ Context state management
+- ✅ Priority routing
+
+### **vs itty-router**
+- ✅ Structured architecture for large applications
+- ✅ Rich feature set out of the box
+- ✅ Enterprise-ready interceptors
+- ✅ Comprehensive TypeScript types
 
 ---
+
+## **Roadmap & Future Enhancements**
+
+We're continuously improving EdgeMaster. Here's what's on our radar:
+
+### **Planned Features**
+- OpenAPI 3.0 specification generation from routes
+- GraphQL adapter for edge
+- WebSocket support for Durable Objects
+- Built-in observability (tracing, metrics)
+- Enhanced D1 database helpers
+- R2 storage utilities
+- Queue and Pub/Sub integrations
+- AI/ML helper utilities
+- Edge-native testing framework
+- CLI tool for scaffolding projects
+
+### **Improvements**
+- Enhanced TypeScript inference
+- Performance optimizations
+- More built-in interceptors
+- Additional example applications
+- Video tutorials and guides
+
+**Want to suggest a feature?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)!
+
+---
+
+## **Contributing**
+
+We welcome contributions from the community! EdgeMaster is built by developers, for developers.
+
+### **How to Contribute**
+
+1. **Fork the repository** on GitHub
+2. **Install dependencies**: `npm install`
+3. **Run tests**: `npm run test` (ensure they pass)
+4. **Make your changes** with tests
+5. **Commit and push** to your fork
+6. **Submit a pull request** with a clear description
+
+### **What We're Looking For**
+
+- 🐛 Bug fixes
+- ✨ New features (discuss in an issue first)
+- 📝 Documentation improvements
+- 🧪 Additional test coverage
+- 💡 Example applications
+- 🎨 Performance optimizations
+
+### **Development Setup**
+
+```bash
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/edge-master.git
+cd edge-master
+
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Build
+npm run build
+```
+
+### **Guidelines**
+
+- Maintain backward compatibility
+- Follow existing code style
+- Write tests for new features
+- Update documentation as needed
+- Keep commits focused and clear
+
+---
+
+## **Community & Support**
+
+### **Get Help**
+
+- 📚 **[Documentation](https://em.asanflow.com/)** - Comprehensive guides and API reference
+- 💬 **[GitHub Discussions](https://github.com/sharif3271/edge-master/discussions)** - Ask questions and share ideas
+- 🐛 **[GitHub Issues](https://github.com/sharif3271/edge-master/issues)** - Report bugs and request features
+- 📧 **Email**: [sharif3271@gmail.com](mailto:sharif3271@gmail.com) - Direct support
+
+### **Stay Updated**
+
+- ⭐ **[Star on GitHub](https://github.com/sharif3271/edge-master)** - Show your support
+- 👀 **[Watch Releases](https://github.com/sharif3271/edge-master/releases)** - Get notified of new versions
+- 🐦 Follow updates on social media
+
+---
+
+## **Credits & Acknowledgments**
+
+EdgeMaster is developed and maintained by **[Sharif Eiri](https://github.com/sharif3271/)**.
+
+### **Philosophy**
+
+EdgeMaster is inspired by the simplicity and elegance of microframeworks like Express.js, but purpose-built for the unique constraints and opportunities of edge computing. Our mission is to bring structure and scalability to edge applications without sacrificing performance.
+
+### **Special Thanks**
+
+- The **Cloudflare Workers** team for building an amazing platform
+- The **open-source community** for inspiration and contributions
+- All **contributors** who have helped improve EdgeMaster
+
+---
+
+## **License**
+
+EdgeMaster is MIT licensed. See the [LICENSE](LICENSE) file for details.
+
+---
+
+<p align="center">
+  <strong>Thank you for choosing EdgeMaster!</strong><br>
+  Build amazing edge applications. 🚀<br><br>
+  <a href="https://github.com/sharif3271/edge-master">⭐ Star on GitHub</a> •
+  <a href="https://em.asanflow.com/">📚 Read the Docs</a> •
+  <a href="mailto:sharif3271@gmail.com">📧 Get Support</a>
+</p>

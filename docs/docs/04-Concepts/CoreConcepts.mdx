@@ -1,7 +1,68 @@
 ---
 title: Core Concepts
+description: Understanding EdgeMaster's architecture and design principles
 ---
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+# Core Concepts
+
+Understanding EdgeMaster's architecture will help you build better applications.
+
+## Request Lifecycle
+
+Every request in EdgeMaster goes through a predictable flow:
+
+```
+┌─────────────────────┐
+│  Incoming Request   │
+└──────────┬──────────┘
+           ↓
+┌──────────────────────┐
+│ Request Interceptors │  ← Auth, Logging, Validation
+└──────────┬───────────┘
+           ↓
+┌──────────────────────┐
+│   Route Matching     │  ← Find matching route
+└──────────┬───────────┘
+           ↓
+┌──────────────────────┐
+│   Route Handler      │
+│  ┌────────────────┐  │
+│  │   Task 1       │  │  ← Sequential execution
+│  │   Task 2       │  │
+│  │   Task N       │  │
+│  └────────────────┘  │
+└──────────┬───────────┘
+           ↓
+┌──────────────────────┐
+│Response Interceptors │  ← CORS, Logging
+└──────────┬───────────┘
+           ↓
+┌──────────────────────┐
+│ Response to Client   │
+└──────────────────────┘
+```
+
+## Core Components
+
+### EdgeController
+The main orchestrator with route management, interceptors, and error handling.
+
+### RouteHandler
+Manages sequential task execution for matched routes.
+
+### Task
+Individual units of work with optional conditions and else branches.
+
+## Context & State
+
+Share data across middleware and handlers using the context state system.
+
+```typescript
+// Set in interceptor
+setState(ctx, 'user', userData);
+
+// Get in handler
+const user = getState(ctx, 'user');
+```
+
+For complete details, see the full [Core Concepts documentation](https://github.com/sharif3271/edge-master/blob/main/CORE_CONCEPTS.md).

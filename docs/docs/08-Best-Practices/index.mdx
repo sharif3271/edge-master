@@ -1,7 +1,753 @@
 ---
 title: Best Practices
+description: Best practices and recommended patterns for EdgeMaster applications
 ---
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+# Best Practices
+
+Learn the recommended patterns and best practices for building production-ready EdgeMaster applications.
+
+## Project Structure
+
+### Recommended File Organization
+
+```
+my-edge-app/
+├── src/
+│   ├── index.ts              # Main entry point
+│   ├── routes/
+│   │   ├── users.ts          # User routes
+│   │   ├── posts.ts          # Post routes
+│   │   └── auth.ts           # Auth routes
+│   ├── handlers/
+│   │   ├── users.handler.ts  # User handlers
+│   │   └── posts.handler.ts  # Post handlers
+│   ├── tasks/
+│   │   ├── validation.ts     # Validation tasks
+│   │   └── transform.ts      # Transform tasks
+│   ├── interceptors/
+│   │   └── custom.ts         # Custom interceptors
+│   ├── lib/
+│   │   ├── database.ts       # Database utilities
+│   │   └── cache.ts          # Cache utilities
+│   └── types/
+│       └── index.ts          # Type definitions
+├── test/
+│   └── routes/
+│       └── users.test.ts
+├── wrangler.toml
+├── package.json
+└── tsconfig.json
+```
+
+### Modular Routes
+
+**routes/users.ts:**
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+import { listUsersHandler, getUserHandler, createUserHandler } from '../handlers/users.handler';
+
+export function registerUserRoutes(app: EdgeController) {
+  app.GET('/users', listUsersHandler);
+  app.GET('/users/:id', getUserHandler);
+  app.POST('/users', createUserHandler);
+}
+```
+
+**src/index.ts:**
+```typescript
+import { EdgeController, corsInterceptor } from 'edge-master';
+import { registerUserRoutes } from './routes/users';
+import { registerPostRoutes } from './routes/posts';
+
+const app = new EdgeController();
+
+// Add global interceptors
+app.addInterceptor(corsInterceptor({ origin: '*' }));
+
+// Register routes
+registerUserRoutes(app);
+registerPostRoutes(app);
+
+export default {
+  fetch: (req: Request, env: any) => app.handleRequest({ req, env })
+};
+```
+
+---
+
+## Task Design
+
+### Create Reusable Tasks
+
+**Good - Reusable:**
+```typescript
+// tasks/validation.ts
+export const validateUserTask = new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    if (!body.email || !body.name) {
+      return badRequest('Email and name are required');
+    }
+
+    return body;
+  }
+});
+
+// Use in multiple handlers
+app.POST('/users', new RouteHandler(
+  validateUserTask,
+  new Task({
+    do: async (ctx) => {
+      const userData = getState(ctx, 'taskResult');
+      const user = await createUser(userData);
+      return json({ user }, { status: 201 });
+    }
+  })
+));
+```
+
+### Task Composition
+
+```typescript
+const authTask = new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+    if (!user) return unauthorized();
+    setState(ctx, 'authenticated', true);
+    return ctx.reqCtx.req;
+  }
+});
+
+const validateTask = new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+    if (!isValid(body)) return badRequest();
+    return body;
+  }
+});
+
+const createResourceTask = new Task({
+  do: async (ctx) => {
+    const data = getState(ctx, 'validated');
+    const resource = await create(data);
+    return json({ resource }, { status: 201 });
+  }
+});
+
+// Compose tasks
+app.POST('/resources', new RouteHandler(
+  authTask,
+  validateTask,
+  createResourceTask
+));
+```
+
+---
+
+## Error Handling
+
+### Always Use Try-Catch for External Calls
+
+**Bad:**
+```typescript
+app.GET('/data', new RouteHandler(new Task({
+  do: async () => {
+    const response = await fetch('https://api.example.com/data');
+    return json(await response.json());
+  }
+})));
+```
+
+**Good:**
+```typescript
+app.GET('/data', new RouteHandler(new Task({
+  do: async () => {
+    try {
+      const response = await fetch('https://api.example.com/data', {
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      return json({ data });
+    } catch (error) {
+      console.error('External API error:', error);
+      return serverError('Failed to fetch data');
+    }
+  }
+})));
+```
+
+### Custom Error Handlers
+
+```typescript
+app.onError(async (error, ctx) => {
+  const requestId = crypto.randomUUID();
+
+  // Log with context
+  console.error('Error:', {
+    requestId,
+    error: error.message,
+    stack: error.stack,
+    url: ctx.reqCtx.req.url,
+    method: ctx.reqCtx.req.method
+  });
+
+  // Don't expose internals in production
+  return json({
+    error: 'Internal Server Error',
+    requestId
+  }, { status: 500 });
+});
+
+app.onNotFound(async ({ reqCtx }) => {
+  return json({
+    error: 'Not Found',
+    path: new URL(reqCtx.req.url).pathname
+  }, { status: 404 });
+});
+```
+
+---
+
+## Security
+
+### Input Validation
+
+Always validate user input:
+
+```typescript
+import { z } from 'zod';
+
+const CreateUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2).max(100),
+  age: z.number().min(0).max(120).optional()
+});
+
+app.POST('/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+    const result = CreateUserSchema.safeParse(body);
+
+    if (!result.success) {
+      return json({
+        error: 'Validation Error',
+        details: result.error.errors
+      }, { status: 400 });
+    }
+
+    const user = await createUser(result.data);
+    return json({ user }, { status: 201 });
+  }
+})));
+```
+
+### Authentication Best Practices
+
+```typescript
+import { jwtInterceptor, getState } from 'edge-master';
+
+// Use JWT interceptor for auth
+app.addInterceptor(jwtInterceptor({
+  verify: async (token, req) => {
+    const payload = await verifyJWT(token, env.JWT_SECRET);
+    if (!payload) throw new Error('Invalid token');
+    return payload;
+  },
+  exclude: [
+    '/auth/login',
+    '/auth/register',
+    '/public/*'
+  ],
+  onError: (error) => unauthorized(error.message)
+}));
+
+// Check permissions in handlers
+app.DELETE('/posts/:id', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user');
+    const postId = new URL(ctx.reqCtx.req.url).pathname.split('/').pop();
+    const post = await getPost(postId);
+
+    // Check ownership or admin role
+    if (post.authorId !== user.id && user.role !== 'admin') {
+      return forbidden('Insufficient permissions');
+    }
+
+    await deletePost(postId);
+    return json({ message: 'Post deleted' });
+  }
+})));
+```
+
+### Rate Limiting
+
+```typescript
+import { rateLimitInterceptor, KVRateLimitStorage } from 'edge-master';
+
+app.addInterceptor(rateLimitInterceptor({
+  limit: 100,
+  window: 60000, // 1 minute
+  storage: new KVRateLimitStorage(env.RATE_LIMIT_KV),
+  keyGenerator: (req) => {
+    // Rate limit by API key or IP
+    const apiKey = req.headers.get('X-API-Key');
+    if (apiKey) return `api:${apiKey}`;
+
+    const ip = req.headers.get('CF-Connecting-IP');
+    return `ip:${ip}`;
+  },
+  onLimit: () => json({
+    error: 'Rate Limit Exceeded',
+    message: 'Too many requests, please try again later'
+  }, { status: 429 })
+}));
+```
+
+### CORS Configuration
+
+```typescript
+import { corsInterceptor } from 'edge-master';
+
+// Production CORS
+app.addInterceptor(corsInterceptor({
+  origin: ['https://app.example.com', 'https://example.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  maxAge: 86400
+}));
+
+// Development CORS
+if (env.ENVIRONMENT === 'development') {
+  app.addInterceptor(corsInterceptor({ origin: '*' }));
+}
+```
+
+---
+
+## Performance
+
+### Use Caching Effectively
+
+```typescript
+import { cacheInterceptor } from 'edge-master';
+
+const { check, store } = cacheInterceptor({
+  ttl: 3600, // 1 hour
+  methods: ['GET', 'HEAD'],
+  varyHeaders: ['Accept-Language'],
+  cacheKey: (req) => {
+    const url = new URL(req.url);
+    return `cache:v1:${url.pathname}${url.search}`;
+  }
+});
+
+app.addInterceptor(check);
+app.addInterceptor(store);
+```
+
+### Optimize Database Queries
+
+```typescript
+// Bad - Multiple queries
+app.GET('/users/:id/posts', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const userId = new URL(req.url).pathname.split('/')[2];
+    const user = await getUser(userId); // Query 1
+    const posts = await getPosts(userId); // Query 2
+    return json({ user, posts });
+  }
+})));
+
+// Good - Single query with join
+app.GET('/users/:id/posts', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const userId = new URL(req.url).pathname.split('/')[2];
+    const result = await env.DB.prepare(`
+      SELECT u.*, p.* FROM users u
+      LEFT JOIN posts p ON p.user_id = u.id
+      WHERE u.id = ?
+    `).bind(userId).all();
+
+    return json(transformResult(result));
+  }
+})));
+```
+
+### Minimize Bundle Size
+
+```typescript
+// Bad - Import entire library
+import * as _ from 'lodash';
+
+// Good - Import only what you need
+import pick from 'lodash/pick';
+
+// Better - Use native methods when possible
+const picked = (obj, keys) => keys.reduce((acc, key) => {
+  if (key in obj) acc[key] = obj[key];
+  return acc;
+}, {});
+```
+
+---
+
+## Testing
+
+### Test Routes
+
+```typescript
+import { EdgeController } from 'edge-master';
+import { registerUserRoutes } from '../src/routes/users';
+
+describe('User Routes', () => {
+  let app: EdgeController;
+
+  beforeEach(() => {
+    app = new EdgeController();
+    registerUserRoutes(app);
+  });
+
+  it('should list users', async () => {
+    const req = new Request('http://localhost/users');
+    const res = await app.handleRequest({ req });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toHaveProperty('users');
+  });
+
+  it('should return 404 for non-existent user', async () => {
+    const req = new Request('http://localhost/users/999');
+    const res = await app.handleRequest({ req });
+
+    expect(res.status).toBe(404);
+  });
+});
+```
+
+### Test Tasks
+
+```typescript
+import { Task } from 'edge-master';
+import { validateUserTask } from '../src/tasks/validation';
+
+describe('Validation Task', () => {
+  it('should validate valid user data', async () => {
+    const ctx = createMockContext({
+      body: { email: 'test@example.com', name: 'Test' }
+    });
+
+    const result = await validateUserTask.execute(ctx);
+    expect(result).toHaveProperty('email');
+  });
+
+  it('should return 400 for invalid data', async () => {
+    const ctx = createMockContext({ body: {} });
+    const result = await validateUserTask.execute(ctx);
+
+    expect(result).toBeInstanceOf(Response);
+    expect(result.status).toBe(400);
+  });
+});
+```
+
+---
+
+## Type Safety
+
+### Define Types for Your Data
+
+```typescript
+// types/index.ts
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'user' | 'admin';
+  createdAt: string;
+}
+
+export interface CreateUserInput {
+  email: string;
+  name: string;
+}
+
+export interface ApiResponse<T> {
+  data?: T;
+  error?: string;
+  message?: string;
+}
+```
+
+### Use Generic Helpers
+
+```typescript
+import { ApiResponse, User } from './types';
+
+function apiSuccess<T>(data: T): Response {
+  const response: ApiResponse<T> = { data };
+  return json(response);
+}
+
+function apiError(message: string, status: number = 400): Response {
+  const response: ApiResponse<never> = { error: message };
+  return json(response, { status });
+}
+
+// Usage
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const user = await getUser(id);
+    if (!user) return apiError('User not found', 404);
+    return apiSuccess<User>(user);
+  }
+})));
+```
+
+---
+
+## Environment Variables
+
+### Use Secrets for Sensitive Data
+
+```bash
+# .dev.vars (local development)
+JWT_SECRET=dev-secret-key
+API_KEY=dev-api-key
+
+# Production (use Wrangler secrets)
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put API_KEY
+```
+
+### Type Your Environment
+
+```typescript
+// types/env.ts
+export interface Env {
+  JWT_SECRET: string;
+  API_KEY: string;
+  DB: D1Database;
+  RATE_LIMIT_KV: KVNamespace;
+  ENVIRONMENT: 'development' | 'production';
+}
+
+// src/index.ts
+export default {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
+    return app.handleRequest({ req: request, env, ctx });
+  }
+};
+```
+
+---
+
+## Logging
+
+### Structured Logging
+
+```typescript
+function log(level: string, message: string, meta?: any) {
+  console.log(JSON.stringify({
+    level,
+    message,
+    meta,
+    timestamp: new Date().toISOString()
+  }));
+}
+
+app.GET('/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+
+    log('info', 'Fetching user', { userId: id });
+
+    try {
+      const user = await getUser(id);
+      if (!user) {
+        log('warn', 'User not found', { userId: id });
+        return notFound();
+      }
+
+      log('info', 'User fetched successfully', { userId: id });
+      return json({ user });
+    } catch (error) {
+      log('error', 'Failed to fetch user', {
+        userId: id,
+        error: error.message
+      });
+      return serverError();
+    }
+  }
+})));
+```
+
+### Request ID Tracking
+
+```typescript
+import { v4 as uuidv4 } from 'uuid';
+
+const requestIdInterceptor: IRequestInterceptor = {
+  type: InterceptorType.Request,
+  async intercept(ctx) {
+    const requestId = uuidv4();
+    setState(ctx, 'requestId', requestId);
+    return ctx.reqCtx.req;
+  }
+};
+
+app.addInterceptor(requestIdInterceptor);
+
+app.onError(async (error, ctx) => {
+  const requestId = getState(ctx, 'requestId');
+
+  log('error', 'Request failed', {
+    requestId,
+    error: error.message,
+    stack: error.stack
+  });
+
+  return json({
+    error: 'Internal Server Error',
+    requestId
+  }, { status: 500 });
+});
+```
+
+---
+
+## Code Organization Tips
+
+### 1. Separate Concerns
+
+- Routes: Define URL patterns and methods
+- Handlers: Contain business logic
+- Tasks: Reusable processing units
+- Interceptors: Cross-cutting concerns
+
+### 2. Use Dependency Injection
+
+```typescript
+export function createUserHandler(db: Database) {
+  return new RouteHandler(new Task({
+    do: async ({ req }) => {
+      const body = await parseJSON(req);
+      const user = await db.users.create(body);
+      return json({ user }, { status: 201 });
+    }
+  }));
+}
+
+// In main file
+const db = new Database(env.DB);
+app.POST('/users', createUserHandler(db));
+```
+
+### 3. Use Constants
+
+```typescript
+// constants.ts
+export const API_VERSION = 'v1';
+export const RATE_LIMIT = {
+  REQUESTS: 100,
+  WINDOW: 60000
+};
+export const CACHE_TTL = {
+  SHORT: 300,    // 5 minutes
+  MEDIUM: 3600,  // 1 hour
+  LONG: 86400    // 24 hours
+};
+```
+
+### 4. Document Your Code
+
+```typescript
+/**
+ * Create a new user account
+ *
+ * @param email - User email address
+ * @param name - User full name
+ * @returns Created user object
+ * @throws {ValidationError} If email or name is invalid
+ */
+async function createUser(email: string, name: string): Promise<User> {
+  // Implementation
+}
+```
+
+---
+
+## Deployment
+
+### Use Environment-Specific Configuration
+
+```toml
+# wrangler.toml
+name = "my-app"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[env.development]
+vars = { ENVIRONMENT = "development" }
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
+routes = [
+  { pattern = "example.com/*", zone_name = "example.com" }
+]
+```
+
+### Pre-deployment Checklist
+
+- [ ] All tests passing
+- [ ] Environment variables set
+- [ ] Error handlers configured
+- [ ] Rate limiting enabled
+- [ ] CORS properly configured
+- [ ] Secrets uploaded to production
+- [ ] Monitoring/logging configured
+
+---
+
+## Monitoring
+
+### Add Health Check Endpoint
+
+```typescript
+app.GET('/health', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    // Check critical services
+    const checks = {
+      database: await checkDatabase(env.DB),
+      cache: await checkCache(env.KV),
+      timestamp: new Date().toISOString()
+    };
+
+    const healthy = Object.values(checks).every(c =>
+      typeof c === 'boolean' ? c : true
+    );
+
+    return json(checks, { status: healthy ? 200 : 503 });
+  }
+})));
+```
+
+---
+
+## Next Steps
+
+- [Performance Optimization](/docs/Performance-Optimization) - Optimize your application
+- [Troubleshooting](/docs/Troubleshooting) - Debug common issues
+- [Examples](/docs/Examples) - See patterns in action
+
+---
+
+**Questions?** [Open an issue](https://github.com/sharif3271/edge-master/issues) or [email us](mailto:sharif3271@gmail.com)
