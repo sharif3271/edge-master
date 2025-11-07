@@ -1,7 +1,454 @@
 ---
-title: Contribution
+title: Contributing to EdgeMaster
+description: How to contribute to EdgeMaster development
 ---
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+# Contributing to EdgeMaster
+
+Thank you for your interest in contributing to EdgeMaster! We welcome contributions from the community to make EdgeMaster even better.
+
+---
+
+## Ways to Contribute
+
+### 🐛 Report Bugs
+Found a bug? [Open an issue](https://github.com/sharif3271/edge-master/issues/new) with:
+- Clear bug description
+- Steps to reproduce
+- Expected vs actual behavior
+- EdgeMaster version and environment
+
+### 💡 Request Features
+Have an idea? [Open a feature request](https://github.com/sharif3271/edge-master/issues/new) with:
+- Clear feature description
+- Use case and motivation
+- Proposed implementation (optional)
+
+### 📝 Improve Documentation
+- Fix typos or errors
+- Add examples or clarifications
+- Write tutorials
+- Translate documentation
+
+### 💻 Submit Code
+- Fix bugs
+- Implement features
+- Improve performance
+- Add tests
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+- **Node.js** 16.0.0 or higher
+- **npm** 7+
+- **Git**
+- **TypeScript** knowledge
+
+### Setup Steps
+
+1. **Fork the repository**
+
+Visit [https://github.com/sharif3271/edge-master](https://github.com/sharif3271/edge-master) and click "Fork"
+
+2. **Clone your fork**
+
+```bash
+git clone https://github.com/YOUR_USERNAME/edge-master.git
+cd edge-master
+```
+
+3. **Install dependencies**
+
+```bash
+npm install
+```
+
+4. **Create a branch**
+
+```bash
+git checkout -b feature/your-feature-name
+# or
+git checkout -b fix/your-bug-fix
+```
+
+---
+
+## Development Workflow
+
+### Project Structure
+
+```
+edge-master/
+├── src/                    # Source code
+│   ├── EdgeController.ts   # Core controller
+│   ├── RouteHandler.ts     # Route handler
+│   ├── Task.ts            # Task implementation
+│   ├── Utils.ts           # Matcher utilities
+│   ├── types/             # TypeScript types
+│   ├── interceptors/      # Built-in interceptors
+│   └── helpers/           # Helper functions
+├── test/                  # Test files
+│   ├── EdgeController.test.ts
+│   ├── RouteHandler.test.ts
+│   └── Task.test.ts
+├── example/               # Example applications
+├── docs/                  # Documentation
+├── dist/                  # Compiled output
+└── coverage/              # Test coverage reports
+```
+
+### Making Changes
+
+1. **Write your code**
+
+Follow the existing code style and patterns:
+
+```typescript
+// Use TypeScript strict mode
+// Document public APIs with JSDoc
+// Keep functions focused and testable
+
+/**
+ * Example function documentation
+ * @param req - The incoming request
+ * @returns A response object
+ */
+export async function handleRequest(req: Request): Promise<Response> {
+  // Implementation
+}
+```
+
+2. **Add tests**
+
+All new features and bug fixes must include tests:
+
+```typescript
+// test/YourFeature.test.ts
+import { describe, it, expect } from '@jest/globals';
+import { YourFeature } from '../src/YourFeature';
+
+describe('YourFeature', () => {
+  it('should do something', () => {
+    const result = YourFeature.doSomething();
+    expect(result).toBe(expected);
+  });
+});
+```
+
+3. **Run tests**
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Coverage must be >= 90%
+```
+
+4. **Build the project**
+
+```bash
+# TypeScript compilation
+npm run build
+
+# Build with minification
+npm run build:minify
+```
+
+5. **Verify types**
+
+```bash
+# Check TypeScript types
+npx tsc --noEmit
+```
+
+---
+
+## Code Style Guidelines
+
+### TypeScript
+
+- Use **strict mode** (`strict: true`)
+- Prefer `const` over `let`
+- Use arrow functions for callbacks
+- Avoid `any` types when possible
+- Export types for public APIs
+
+```typescript
+// ✅ Good
+export interface MyConfig {
+  timeout: number;
+  retries?: number;
+}
+
+export const processData = async (config: MyConfig): Promise<Result> => {
+  const { timeout, retries = 3 } = config;
+  // ...
+};
+
+// ❌ Bad
+export function processData(config: any) {
+  var timeout = config.timeout;
+  // ...
+}
+```
+
+### Naming Conventions
+
+- **Classes**: `PascalCase` (e.g., `EdgeController`)
+- **Functions**: `camelCase` (e.g., `handleRequest`)
+- **Constants**: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_TIMEOUT`)
+- **Interfaces**: `PascalCase` with `I` prefix (e.g., `IRequestInterceptor`)
+- **Types**: `PascalCase` (e.g., `RequestHandler`)
+
+### Comments & Documentation
+
+- Document all public APIs with JSDoc
+- Use comments to explain "why", not "what"
+- Keep comments up-to-date with code changes
+
+```typescript
+/**
+ * Intercepts incoming requests before route handling.
+ * Allows modification of the request or early termination via responder.
+ *
+ * @param ctx - The request context
+ * @returns Modified request object
+ */
+async intercept(ctx: Context): Promise<Request>;
+```
+
+---
+
+## Testing Guidelines
+
+### Test Coverage Requirements
+
+- **Line coverage**: Minimum 90%
+- **Function coverage**: Minimum 100%
+- **Branch coverage**: Minimum 85%
+
+### Test Structure
+
+```typescript
+describe('Feature Name', () => {
+  // Setup
+  beforeEach(() => {
+    // Initialization
+  });
+
+  // Test cases
+  it('should handle normal case', () => {
+    // Arrange
+    const input = createInput();
+
+    // Act
+    const result = processInput(input);
+
+    // Assert
+    expect(result).toBeDefined();
+  });
+
+  it('should handle edge case', () => {
+    // Test edge cases
+  });
+
+  it('should throw error for invalid input', () => {
+    // Test error cases
+    expect(() => process(null)).toThrow();
+  });
+});
+```
+
+### Testing Best Practices
+
+- Test one thing per test case
+- Use descriptive test names
+- Test happy paths and error paths
+- Mock external dependencies
+- Keep tests fast and isolated
+
+---
+
+## Pull Request Process
+
+### Before Submitting
+
+Checklist:
+
+- [ ] Code follows project style guidelines
+- [ ] Tests added/updated and passing
+- [ ] Test coverage >= 90%
+- [ ] Documentation updated
+- [ ] Build succeeds (`npm run build`)
+- [ ] TypeScript types check passes
+- [ ] No linting errors
+- [ ] Commits follow conventional commits
+
+### PR Template
+
+Use this template for your pull request:
+
+```markdown
+## Description
+
+Brief description of changes
+
+## Type of Change
+
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+
+## Testing
+
+How has this been tested?
+
+## Checklist
+
+- [ ] Tests pass
+- [ ] Coverage >= 90%
+- [ ] Documentation updated
+- [ ] No breaking changes (or documented)
+```
+
+### Review Process
+
+1. Submit your PR
+2. Wait for CI checks to pass
+3. Address review feedback
+4. Maintainers will merge when approved
+
+---
+
+## Commit Message Guidelines
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+### Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+### Types
+
+- **feat**: New feature
+- **fix**: Bug fix
+- **docs**: Documentation only
+- **style**: Code style changes (formatting)
+- **refactor**: Code refactoring
+- **perf**: Performance improvement
+- **test**: Adding tests
+- **chore**: Maintenance tasks
+
+### Examples
+
+```bash
+# Feature
+git commit -m "feat(interceptors): add custom cache key generator"
+
+# Bug fix
+git commit -m "fix(router): handle trailing slashes correctly"
+
+# Documentation
+git commit -m "docs(readme): update installation instructions"
+
+# Breaking change
+git commit -m "feat(api)!: change route handler signature
+
+BREAKING CHANGE: RouteHandler now requires async functions"
+```
+
+---
+
+## Release Process
+
+Releases are managed by maintainers:
+
+1. Update version in `package.json`
+2. Update `CHANGELOG.md`
+3. Create git tag
+4. Publish to npm
+5. Create GitHub release
+
+---
+
+## Community Guidelines
+
+### Code of Conduct
+
+- Be respectful and inclusive
+- Welcome newcomers
+- Focus on constructive feedback
+- No harassment or discrimination
+
+### Getting Help
+
+- **Questions**: [GitHub Discussions](https://github.com/sharif3271/edge-master/discussions)
+- **Bugs**: [GitHub Issues](https://github.com/sharif3271/edge-master/issues)
+- **Email**: sharif3271@gmail.com
+
+---
+
+## Areas We Need Help
+
+### High Priority
+
+- [ ] Additional platform adapters (AWS Lambda@Edge, Azure Functions)
+- [ ] OpenAPI/Swagger spec generation
+- [ ] WebSocket support for Durable Objects
+- [ ] GraphQL adapter
+- [ ] More interceptor examples
+
+### Medium Priority
+
+- [ ] Performance benchmarks
+- [ ] More real-world examples
+- [ ] Video tutorials
+- [ ] Translation of documentation
+- [ ] Blog posts and articles
+
+### Good First Issues
+
+Look for issues labeled [`good first issue`](https://github.com/sharif3271/edge-master/labels/good%20first%20issue) to get started!
+
+---
+
+## Recognition
+
+Contributors will be:
+
+- Added to `CONTRIBUTORS.md`
+- Mentioned in release notes
+- Credited in documentation
+
+---
+
+## License
+
+By contributing to EdgeMaster, you agree that your contributions will be licensed under the MIT License.
+
+---
+
+## Questions?
+
+Don't hesitate to ask questions:
+
+- **GitHub Discussions**: [Ask here](https://github.com/sharif3271/edge-master/discussions)
+- **Email**: sharif3271@gmail.com
+- **Issues**: [Open an issue](https://github.com/sharif3271/edge-master/issues)
+
+---
+
+**Thank you for contributing!** Every contribution, no matter how small, helps make EdgeMaster better for everyone. 🙏

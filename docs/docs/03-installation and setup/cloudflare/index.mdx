@@ -1,0 +1,790 @@
+---
+title: Cloudflare Workers Setup
+description: Complete guide to deploying EdgeMaster on Cloudflare Workers
+---
+
+# Cloudflare Workers Setup
+
+Cloudflare Workers is the **recommended platform** for EdgeMaster. This guide covers everything you need to deploy and manage EdgeMaster applications on Cloudflare's global edge network.
+
+---
+
+## Why Cloudflare Workers?
+
+EdgeMaster is specifically optimized for Cloudflare Workers, offering:
+
+- ⚡ **Zero Cold Starts** - Instant response times globally
+- 🌍 **Global Edge Network** - 300+ data centers worldwide
+- 💰 **Generous Free Tier** - 100,000 requests/day free
+- 🔧 **Built-in Services** - KV, D1, R2, Durable Objects, AI
+- 📦 **Zero Dependencies** - ~14KB bundle size
+- 🚀 **Instant Deployment** - Deploy in seconds
+- 💵 **Cost Effective** - $5/month for 10M requests
+
+---
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- **Node.js** 16.0.0 or higher
+- **npm** 7+ or yarn/pnpm
+- **Cloudflare Account** ([Sign up free](https://dash.cloudflare.com/sign-up))
+- **Wrangler CLI** (we'll install this below)
+
+---
+
+## Installation
+
+### Step 1: Install Wrangler CLI
+
+Wrangler is Cloudflare's CLI tool for managing Workers:
+
+```bash
+npm install -g wrangler
+```
+
+Or use locally in your project:
+
+```bash
+npm install -D wrangler
+```
+
+### Step 2: Login to Cloudflare
+
+Authenticate with your Cloudflare account:
+
+```bash
+npx wrangler login
+```
+
+This will open a browser window to authorize Wrangler.
+
+### Step 3: Create a New Project
+
+Initialize a new EdgeMaster project:
+
+```bash
+# Create project directory
+mkdir my-edge-app
+cd my-edge-app
+
+# Initialize package.json
+npm init -y
+
+# Install EdgeMaster
+npm install edge-master
+
+# Install development dependencies
+npm install -D wrangler @cloudflare/workers-types typescript
+```
+
+---
+
+## Configuration
+
+### Create `wrangler.toml`
+
+Create a `wrangler.toml` file in your project root:
+
+```toml
+name = "my-edge-app"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Optional: Enable observability
+[observability]
+enabled = true
+
+# Optional: Configure build
+# [build]
+# command = "npm run build"
+
+# Optional: Set account details
+# account_id = "your-account-id"
+# workers_dev = true
+```
+
+#### Configuration Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `name` | Worker name (unique in your account) | `"my-edge-app"` |
+| `main` | Entry point file | `"src/index.ts"` |
+| `compatibility_date` | Workers runtime version | `"2024-01-01"` |
+| `account_id` | Your Cloudflare account ID | `"abc123..."` |
+| `workers_dev` | Deploy to workers.dev subdomain | `true` |
+
+### Create `tsconfig.json`
+
+Configure TypeScript for Cloudflare Workers:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ES2022",
+    "lib": ["ES2021"],
+    "types": ["@cloudflare/workers-types"],
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+### Update `package.json`
+
+Add helpful scripts:
+
+```json
+{
+  "name": "my-edge-app",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:production": "wrangler deploy --env production",
+    "tail": "wrangler tail",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "edge-master": "^0.10.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20230419.0",
+    "typescript": "^5.0.4",
+    "wrangler": "^3.0.0"
+  }
+}
+```
+
+---
+
+## Create Your Worker
+
+### Basic Worker (`src/index.ts`)
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+const app = new EdgeController();
+
+// Add routes
+app.GET('/api/hello', new RouteHandler(new Task({
+  do: async () => json({
+    message: 'Hello from Cloudflare Workers!',
+    timestamp: new Date().toISOString()
+  })
+})));
+
+app.GET('/api/info', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    return json({
+      url: req.url,
+      method: req.method,
+      headers: Object.fromEntries(req.headers)
+    });
+  }
+})));
+
+// Export fetch handler
+export default {
+  fetch: (request: Request, env: any, ctx: ExecutionContext) => {
+    return app.handleRequest({
+      req: request,
+      env,
+      ctx
+    });
+  }
+};
+```
+
+### Access Cloudflare Environment
+
+```typescript
+export default {
+  fetch: (request: Request, env: any, ctx: ExecutionContext) => {
+    // env: Environment variables and bindings
+    // ctx: Execution context for waitUntil() and passThroughOnException()
+
+    return app.handleRequest({ req: request, env, ctx });
+  }
+};
+```
+
+---
+
+## Local Development
+
+### Run Development Server
+
+Start the local development server:
+
+```bash
+npm run dev
+```
+
+Or with Wrangler directly:
+
+```bash
+npx wrangler dev
+```
+
+Your worker will be available at:
+- **Local:** `http://localhost:8787`
+- **Network:** `http://127.0.0.1:8787`
+
+### Development Options
+
+```bash
+# Run on custom port
+npx wrangler dev --port 3000
+
+# Enable live reload
+npx wrangler dev --live-reload
+
+# Use local bindings
+npx wrangler dev --local
+
+# Enable inspector
+npx wrangler dev --inspect
+```
+
+### Testing Locally
+
+Test your routes with curl:
+
+```bash
+# Test GET endpoint
+curl http://localhost:8787/api/hello
+
+# Test POST endpoint
+curl -X POST http://localhost:8787/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice", "email": "alice@example.com"}'
+```
+
+---
+
+## Deployment
+
+### Deploy to Production
+
+Deploy your worker to Cloudflare's global network:
+
+```bash
+npm run deploy
+```
+
+Or with Wrangler:
+
+```bash
+npx wrangler deploy
+```
+
+Your worker will be deployed to:
+```
+https://my-edge-app.<your-subdomain>.workers.dev
+```
+
+### Deployment Output
+
+```bash
+⛅️ wrangler 3.0.0
+--------------------
+Total Upload: 15.2 KB / gzip: 4.8 KB
+Uploaded my-edge-app (1.2 sec)
+Published my-edge-app (0.3 sec)
+  https://my-edge-app.your-subdomain.workers.dev
+Current Deployment ID: abc-123-def
+```
+
+### Production Deployment
+
+For production with custom domains:
+
+```bash
+npm run deploy:production
+```
+
+---
+
+## Environment Variables & Secrets
+
+### Local Development Variables
+
+Create `.dev.vars` for local development:
+
+```bash
+# .dev.vars
+API_KEY=dev-api-key-12345
+JWT_SECRET=dev-jwt-secret
+DATABASE_URL=https://dev-db.example.com
+STRIPE_KEY=sk_test_123
+```
+
+:::caution
+Never commit `.dev.vars` to version control. Add it to `.gitignore`.
+:::
+
+### Production Secrets
+
+Set production secrets using Wrangler:
+
+```bash
+# Set individual secrets
+npx wrangler secret put API_KEY
+# You'll be prompted to enter the value
+
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put DATABASE_URL
+```
+
+### List Secrets
+
+```bash
+npx wrangler secret list
+```
+
+### Delete Secrets
+
+```bash
+npx wrangler secret delete API_KEY
+```
+
+### Access Environment Variables
+
+```typescript
+export default {
+  fetch: (request: Request, env: any) => {
+    // Access environment variables
+    const apiKey = env.API_KEY;
+    const jwtSecret = env.JWT_SECRET;
+
+    // Use in your application
+    return app.handleRequest({ req: request, env });
+  }
+};
+```
+
+Usage in handlers:
+
+```typescript
+app.POST('/api/auth', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    const jwtSecret = env.JWT_SECRET;
+
+    // Use secret for JWT signing
+    const token = await signJWT(payload, jwtSecret);
+
+    return json({ token });
+  }
+})));
+```
+
+---
+
+## Workers KV (Key-Value Storage)
+
+### Setup KV Namespace
+
+Create a KV namespace:
+
+```bash
+# Create production namespace
+npx wrangler kv:namespace create "MY_KV"
+
+# Create preview namespace (for development)
+npx wrangler kv:namespace create "MY_KV" --preview
+```
+
+### Configure in `wrangler.toml`
+
+Add KV bindings to your `wrangler.toml`:
+
+```toml
+name = "my-edge-app"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# KV Namespace binding
+[[kv_namespaces]]
+binding = "MY_KV"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-kv-namespace-id"
+```
+
+### Use KV in Your Worker
+
+```typescript
+app.GET('/api/cache/:key', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const url = new URL(req.url);
+    const key = url.pathname.split('/').pop();
+
+    // Read from KV
+    const value = await env.MY_KV.get(key);
+
+    if (!value) {
+      return notFound(`Key ${key} not found`);
+    }
+
+    return json({ key, value });
+  }
+})));
+
+app.POST('/api/cache/:key', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const url = new URL(req.url);
+    const key = url.pathname.split('/').pop();
+    const body = await parseJSON(req);
+
+    // Write to KV with optional expiration (in seconds)
+    await env.MY_KV.put(key, JSON.stringify(body.value), {
+      expirationTtl: 3600 // 1 hour
+    });
+
+    return json({ success: true, key });
+  }
+})));
+```
+
+### KV Commands
+
+```bash
+# List namespaces
+npx wrangler kv:namespace list
+
+# List keys in namespace
+npx wrangler kv:key list --binding=MY_KV
+
+# Get value
+npx wrangler kv:key get "my-key" --binding=MY_KV
+
+# Put value
+npx wrangler kv:key put "my-key" "my-value" --binding=MY_KV
+
+# Delete key
+npx wrangler kv:key delete "my-key" --binding=MY_KV
+```
+
+---
+
+## D1 Database (SQL)
+
+### Create D1 Database
+
+```bash
+# Create database
+npx wrangler d1 create my-database
+```
+
+### Configure in `wrangler.toml`
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "my-database"
+database_id = "your-database-id"
+```
+
+### Use D1 in Your Worker
+
+```typescript
+app.GET('/api/users', new RouteHandler(new Task({
+  do: async ({ env }) => {
+    const { results } = await env.DB.prepare(
+      'SELECT * FROM users LIMIT 10'
+    ).all();
+
+    return json({ users: results });
+  }
+})));
+
+app.POST('/api/users', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const { name, email } = await parseJSON(req);
+
+    const { success } = await env.DB.prepare(
+      'INSERT INTO users (name, email) VALUES (?, ?)'
+    ).bind(name, email).run();
+
+    return json({ success }, { status: 201 });
+  }
+})));
+```
+
+### D1 Commands
+
+```bash
+# Execute SQL
+npx wrangler d1 execute my-database --command="CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)"
+
+# Execute SQL file
+npx wrangler d1 execute my-database --file=schema.sql
+
+# Query database
+npx wrangler d1 execute my-database --command="SELECT * FROM users"
+```
+
+---
+
+## R2 Object Storage
+
+### Create R2 Bucket
+
+```bash
+npx wrangler r2 bucket create my-bucket
+```
+
+### Configure in `wrangler.toml`
+
+```toml
+[[r2_buckets]]
+binding = "MY_BUCKET"
+bucket_name = "my-bucket"
+```
+
+### Use R2 in Your Worker
+
+```typescript
+app.POST('/api/upload', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const file = await req.blob();
+    const filename = `${Date.now()}-file.jpg`;
+
+    // Upload to R2
+    await env.MY_BUCKET.put(filename, file);
+
+    return json({
+      success: true,
+      filename,
+      url: `https://my-bucket.r2.dev/${filename}`
+    });
+  }
+})));
+
+app.GET('/api/files/:filename', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const url = new URL(req.url);
+    const filename = url.pathname.split('/').pop();
+
+    // Get from R2
+    const object = await env.MY_BUCKET.get(filename);
+
+    if (!object) {
+      return notFound('File not found');
+    }
+
+    return new Response(object.body, {
+      headers: {
+        'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream'
+      }
+    });
+  }
+})));
+```
+
+---
+
+## Custom Domains
+
+### Add Custom Domain
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. Navigate to **Workers & Pages**
+3. Select your worker
+4. Click **Triggers** tab
+5. Click **Add Custom Domain**
+6. Enter your domain (e.g., `api.example.com`)
+
+### Configure Routes
+
+For zone-level routing, add routes in `wrangler.toml`:
+
+```toml
+routes = [
+  { pattern = "api.example.com/*", zone_name = "example.com" },
+  { pattern = "www.example.com/api/*", zone_name = "example.com" }
+]
+```
+
+---
+
+## Monitoring & Logging
+
+### View Logs (Tail)
+
+Stream live logs from your worker:
+
+```bash
+npm run tail
+```
+
+Or with Wrangler:
+
+```bash
+npx wrangler tail
+```
+
+### Filter Logs
+
+```bash
+# Filter by status
+npx wrangler tail --status error
+
+# Filter by HTTP method
+npx wrangler tail --method POST
+
+# Filter by sampling rate
+npx wrangler tail --sampling-rate 0.5
+```
+
+### Console Logging
+
+Add logging to your worker:
+
+```typescript
+app.GET('/api/debug', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    console.log('Request received:', req.url);
+    console.log('Method:', req.method);
+    console.log('Headers:', Object.fromEntries(req.headers));
+
+    return json({ debug: true });
+  }
+})));
+```
+
+---
+
+## Best Practices
+
+### 1. Use TypeScript
+
+Always use TypeScript for type safety:
+
+```typescript
+interface Env {
+  MY_KV: KVNamespace;
+  DB: D1Database;
+  API_KEY: string;
+}
+
+export default {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
+    return app.handleRequest({ req: request, env, ctx });
+  }
+};
+```
+
+### 2. Handle Errors Gracefully
+
+```typescript
+app.onError(async (error, { req, env }) => {
+  console.error('Error:', error);
+
+  // Log to external service
+  if (env.SENTRY_DSN) {
+    // await logToSentry(error);
+  }
+
+  return json({
+    error: 'Internal Server Error',
+    message: error.message
+  }, { status: 500 });
+});
+```
+
+### 3. Use Cache API
+
+```typescript
+import { cacheInterceptor } from 'edge-master';
+
+// Cache GET requests
+app.addInterceptor(cacheInterceptor({
+  ttl: 3600, // 1 hour
+  shouldCache: (req) => req.method === 'GET'
+}));
+```
+
+### 4. Set Resource Limits
+
+Monitor CPU time and memory usage to stay within limits:
+- **CPU Time:** 10ms (free) / 50ms (paid)
+- **Memory:** 128MB
+- **Subrequest Limit:** 50 (free) / 1000 (paid)
+
+---
+
+## Troubleshooting
+
+### Error: "Exceeded CPU time limit"
+
+**Solution:** Optimize async operations and reduce computation:
+
+```typescript
+// ❌ Bad: Synchronous heavy computation
+const result = heavyComputation();
+
+// ✅ Good: Use async and optimize
+const result = await optimizedAsyncComputation();
+```
+
+### Error: "KV binding not found"
+
+**Solution:** Ensure KV namespace is configured in `wrangler.toml` and deployed:
+
+```bash
+npx wrangler deploy
+```
+
+### Error: "Module not found: edge-master"
+
+**Solution:** Ensure EdgeMaster is installed:
+
+```bash
+npm install edge-master
+```
+
+---
+
+## Next Steps
+
+Now that your EdgeMaster app is running on Cloudflare Workers:
+
+### 🚀 Scale Your Application
+- [Performance Optimization](/docs/Performance-Optimization)
+- [Best Practices](/docs/Best-Practices)
+- [Caching Strategies](/docs/Performance-Optimization)
+
+### 🔒 Add Authentication
+- [JWT Authentication](/docs/API-Reference)
+- [API Key Protection](/docs/Best-Practices)
+
+### 💡 Explore Examples
+- [API Gateway Example](https://github.com/sharif3271/edge-master/tree/main/example/01-api-gateway)
+- [Authentication Example](https://github.com/sharif3271/edge-master/tree/main/example/02-authentication)
+- [Workers KV Example](https://github.com/sharif3271/edge-master/tree/main/example/08-workers-kv)
+
+---
+
+## Additional Resources
+
+- 📘 [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
+- 🔧 [Wrangler CLI Docs](https://developers.cloudflare.com/workers/wrangler/)
+- 💬 [EdgeMaster Discord](https://discord.gg/edgemaster)
+- 🐛 [Report Issues](https://github.com/sharif3271/edge-master/issues)
+
+---
+
+**Happy deploying!** 🚀

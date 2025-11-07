@@ -1,3 +1,377 @@
 ---
-title: Conceps
+title: Concepts
+description: High-level concepts and philosophy behind EdgeMaster
 ---
+
+# Concepts
+
+EdgeMaster is built on a foundation of proven architectural patterns adapted for edge computing. This section introduces the key concepts that make EdgeMaster powerful yet simple to use.
+
+---
+
+## Why EdgeMaster?
+
+### The Edge Computing Challenge
+
+Edge computing brings applications closer to users for better performance, but it comes with unique constraints:
+
+- **Limited CPU Time**: Workers have strict execution limits (10-50ms)
+- **No File System**: No access to traditional Node.js APIs
+- **Minimal Dependencies**: Every KB counts in bundle size
+- **Global Distribution**: Code runs in 300+ data centers
+- **Stateless Execution**: Each request is isolated
+
+Traditional frameworks like Express.js weren't built for these constraints. EdgeMaster was designed from the ground up for edge environments.
+
+### The Problem EdgeMaster Solves
+
+As edge applications grow, they quickly become unmaintainable:
+
+```typescript
+// ❌ Typical edge app growth pattern
+if (path === '/users' && method === 'GET') {
+  // Check auth
+  if (!hasAuth(req)) return unauthorized();
+  // Check rate limit
+  if (isRateLimited(req)) return tooManyRequests();
+  // Handle request
+  const users = await getUsers();
+  return json(users);
+}
+else if (path === '/users' && method === 'POST') {
+  // Duplicate auth check
+  if (!hasAuth(req)) return unauthorized();
+  // Duplicate rate limit check
+  if (isRateLimited(req)) return tooManyRequests();
+  // Handle request
+  const user = await createUser(req);
+  return json(user);
+}
+// ... 50 more routes with duplicated logic
+```
+
+EdgeMaster brings structure and reusability:
+
+```typescript
+// ✅ EdgeMaster approach
+const app = new EdgeController();
+
+// Apply to all routes
+app.addInterceptor(jwtInterceptor({ secret: env.JWT_SECRET }));
+app.addInterceptor(rateLimitInterceptor({ limit: 100, window: 60 }));
+
+// Define routes cleanly
+app.GET('/users', listUsersHandler);
+app.POST('/users', createUserHandler);
+```
+
+---
+
+## Core Concepts
+
+### 1. **EdgeController** - The Orchestrator
+
+The `EdgeController` is the central hub that manages everything:
+
+```typescript
+const app = new EdgeController();
+
+// It orchestrates:
+// - Route matching
+// - Request/response interceptors
+// - Error handling
+// - Context management
+```
+
+**Key insight:** One controller per worker, configured once, handles all requests.
+
+### 2. **Routes** - Defining Endpoints
+
+Routes map incoming requests to handlers:
+
+```typescript
+// HTTP method helpers
+app.GET('/users', handler);
+app.POST('/users', handler);
+app.PUT('/users/:id', handler);
+app.DELETE('/users/:id', handler);
+
+// Route grouping
+app.group('/api/v1', (api) => {
+  api.GET('/users', handler);    // /api/v1/users
+  api.POST('/posts', handler);   // /api/v1/posts
+});
+
+// Priority-based matching
+app.addRoute(specificMatcher, handler, 100);  // Matched first
+app.addRoute(generalMatcher, handler, 0);     // Matched last
+```
+
+**Key insight:** Routes are matched by priority, allowing fine-grained control.
+
+### 3. **Interceptors** - Cross-Cutting Concerns
+
+Interceptors are EdgeMaster's middleware system, split into two types:
+
+#### Request Interceptors (Before)
+Execute **before** your route handler:
+
+```typescript
+app.addInterceptor(jwtInterceptor());          // Authentication
+app.addInterceptor(rateLimitInterceptor());    // Rate limiting
+app.addInterceptor(cacheCheckInterceptor());   // Check cache
+app.addInterceptor(loggingInterceptor().request); // Log requests
+```
+
+#### Response Interceptors (After)
+Execute **after** your route handler:
+
+```typescript
+app.addInterceptor(corsInterceptor());         // Add CORS headers
+app.addInterceptor(cacheStoreInterceptor());   // Store in cache
+app.addInterceptor(loggingInterceptor().response); // Log responses
+```
+
+**Key insight:** Interceptors can short-circuit the pipeline (e.g., return from cache, block rate-limited requests).
+
+### 4. **Tasks** - Units of Work
+
+Tasks are the atomic units that do the actual work:
+
+```typescript
+new Task({
+  when: async ({ req }) => req.method === 'POST',  // Condition (optional)
+  do: async ({ req, env }) => {                    // Main logic
+    const body = await parseJSON(req);
+    const result = await processData(body, env);
+    return json({ result });
+  },
+  doThen: async (res, ctx) => {                    // Post-process (optional)
+    console.log('Task completed');
+  }
+});
+```
+
+**Key insight:** Tasks compose - multiple tasks can run in sequence for a single route.
+
+### 5. **Context** - Shared State
+
+The context object flows through the entire request lifecycle:
+
+```typescript
+interface Context {
+  reqCtx: { req: Request };      // The request
+  env?: any;                      // Environment (KV, D1, secrets)
+  ctx?: ExecutionContext;         // Workers context
+  state: Map<string, any>;        // Shared state
+}
+```
+
+Use the context to share data:
+
+```typescript
+// In interceptor
+setState(ctx, 'user', { id: 123, role: 'admin' });
+
+// In handler
+const user = getState(ctx, 'user');
+```
+
+**Key insight:** State is scoped to a single request - perfect for edge's stateless model.
+
+### 6. **Helpers** - Developer Experience
+
+EdgeMaster provides helpers for common operations:
+
+```typescript
+// Request helpers
+const body = await parseJSON(req);
+const formData = await parseFormData(req);
+const query = getQuery(req, 'search');
+
+// Response helpers
+return json({ data });           // JSON response
+return text('Hello');            // Text response
+return html('<h1>Hi</h1>');      // HTML response
+return redirect('/new-path');    // Redirect
+
+// Error helpers
+return badRequest('Invalid input');
+return unauthorized('Auth required');
+return notFound('Not found');
+return serverError('Oops');
+```
+
+**Key insight:** Helpers abstract away boilerplate, letting you focus on business logic.
+
+---
+
+## Framework Philosophy
+
+### 1. **Zero Dependencies = Maximum Compatibility**
+
+EdgeMaster has **zero runtime dependencies**. This means:
+
+- ✅ Smallest possible bundle size (~14 KB)
+- ✅ Works on any edge platform (Cloudflare, AWS, Azure, etc.)
+- ✅ No supply chain vulnerabilities
+- ✅ Predictable behavior
+
+### 2. **Type Safety First**
+
+Full TypeScript support with strict typing:
+
+```typescript
+// Auto-complete and type checking everywhere
+app.GET('/users', new RouteHandler(new Task({
+  do: async (ctx: ContextWithReq): Promise<Response> => {
+    // ctx.reqCtx.req is typed as Request
+    // env is typed based on your interface
+    // Return value must be Response
+  }
+})));
+```
+
+### 3. **Composability Over Configuration**
+
+Instead of complex configuration files, EdgeMaster uses composition:
+
+```typescript
+// Compose interceptors
+const authWithLogging = [
+  loggingInterceptor().request,
+  jwtInterceptor(),
+  loggingInterceptor().response
+];
+
+authWithLogging.forEach(i => app.addInterceptor(i));
+
+// Compose tasks
+const validateAndProcess = new RouteHandler(
+  validateTask,
+  processTask,
+  logTask
+);
+```
+
+### 4. **Edge-First Performance**
+
+Every decision optimized for edge constraints:
+
+- **Fast cold starts** (&lt;1ms) - no heavy initialization
+- **Minimal allocations** - reuse objects where possible
+- **CPU-efficient** - async/await throughout, early exits
+- **Memory-efficient** - small footprint, no global state
+
+### 5. **Production-Ready Out of the Box**
+
+Built-in features you need for production:
+
+- JWT & API key authentication
+- Rate limiting (memory & KV-backed)
+- Caching (Cloudflare Cache API)
+- CORS support
+- Request/response logging
+- Error handling
+
+---
+
+## When to Use EdgeMaster
+
+### ✅ Great For:
+
+- **API Gateways** - Route and transform requests to backend services
+- **REST APIs** - Full CRUD operations with auth and caching
+- **Microservices** - Individual services on the edge
+- **Proxy/Router** - Intelligent request routing
+- **Authentication Services** - JWT/OAuth flows
+- **Content APIs** - Serve dynamic content from KV/D1
+- **Real-time APIs** - Low-latency responses globally
+
+### ⚠️ Consider Alternatives For:
+
+- **Static Sites** - Use Cloudflare Pages or similar
+- **Long-running Tasks** - Use Durable Objects or traditional servers
+- **Heavy Computation** - Use traditional cloud functions
+- **File Uploads >100MB** - Use R2 directly with signed URLs
+- **WebSocket-heavy Apps** - Use Durable Objects
+
+---
+
+## Comparison with Other Frameworks
+
+### vs Express.js
+
+| Aspect | EdgeMaster | Express |
+|--------|-----------|---------|
+| **Environment** | Edge (Workers) | Node.js |
+| **Bundle Size** | 14 KB | 200+ KB |
+| **Cold Start** | &lt;1ms | 100-500ms |
+| **Philosophy** | Functional composition | Imperative middleware |
+| **Best For** | Global APIs, low latency | Traditional backends |
+
+### vs Hono
+
+| Aspect | EdgeMaster | Hono |
+|--------|-----------|------|
+| **Architecture** | Task-based, structured | Lightweight, simple |
+| **Built-in Features** | Auth, rate limit, cache | Basic routing |
+| **Complexity** | Scales to large apps | Best for simple apps |
+| **State Management** | Context.state Map | Context variables |
+
+### vs itty-router
+
+| Aspect | EdgeMaster | itty-router |
+|--------|-----------|-------------|
+| **Size** | 14 KB | 1 KB |
+| **Features** | Full framework | Minimal router |
+| **Production Ready** | Yes (auth, cache, etc.) | DIY |
+| **Learning Curve** | Moderate | Low |
+
+**Recommendation:** Use itty-router for tiny projects, Hono for simple APIs, EdgeMaster for production applications.
+
+---
+
+## Learning Path
+
+### 1. **Start Here**
+- [Getting Started](/docs/getting-started) - Build your first app
+- [Installation & Setup](/docs/installation%20and%20setup) - Set up your environment
+
+### 2. **Understand the Foundation**
+- [Core Concepts](/docs/Concepts/CoreConcepts) - Deeper dive into concepts
+- [Architecture](/docs/Concepts/Architecture) - How EdgeMaster works internally
+
+### 3. **Build Real Features**
+- [Tutorials](/docs/Tutorials) - Step-by-step guides
+- [Examples](/docs/Examples) - Real-world code examples
+
+### 4. **Master the Details**
+- [API Reference](/docs/API-Reference) - Complete API documentation
+- [Best Practices](/docs/Best-Practices) - Production patterns
+- [Performance Optimization](/docs/Performance-Optimization) - Speed tips
+
+---
+
+## Key Takeaways
+
+1. **EdgeMaster brings structure to edge computing** - No more spaghetti code
+2. **Interceptors handle cross-cutting concerns** - DRY principle in action
+3. **Tasks compose for complex logic** - Build big from small pieces
+4. **Context flows through the pipeline** - Share data safely
+5. **Zero dependencies = maximum compatibility** - Works everywhere
+6. **Type-safe by default** - Catch errors before deployment
+7. **Production-ready features included** - Auth, caching, rate limiting
+
+---
+
+## Next Steps
+
+- **Ready to code?** [Getting Started Guide →](/docs/getting-started)
+- **Want deep understanding?** [Architecture Documentation →](/docs/Concepts/Architecture)
+- **Need API details?** [API Reference →](/docs/API-Reference)
+- **Building for production?** [Best Practices →](/docs/Best-Practices)
+
+---
+
+**Welcome to EdgeMaster!** The structured framework for edge computing.

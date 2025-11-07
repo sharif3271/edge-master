@@ -267,7 +267,8 @@ body .getStarted {
 }
 
 .comparisonTable table {
-    width: 100%;
+    width: max-content;
+    margin: 0 auto;
     border-collapse: collapse;
     background: var(--ifm-card-background-color);
     border-radius: 12px;

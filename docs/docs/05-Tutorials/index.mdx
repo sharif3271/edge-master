@@ -1,7 +1,555 @@
 ---
 title: Tutorials
+description: Step-by-step tutorials to master EdgeMaster
 ---
 
-:::caution
-We are currently developing the _Documents_. 
-:::
+# Tutorials
+
+Learn EdgeMaster through hands-on tutorials that build real-world applications. Each tutorial teaches specific concepts while creating something practical.
+
+---
+
+## Quick Start Tutorials
+
+### Tutorial 1: Build a REST API
+
+**Time: 15 minutes** | **Level: Beginner**
+
+Build a complete REST API with CRUD operations.
+
+#### Step 1: Setup
+
+```bash
+mkdir my-api && cd my-api
+npm init -y
+npm install edge-master
+npm install -D wrangler @cloudflare/workers-types typescript
+```
+
+#### Step 2: Create the API
+
+```typescript
+// src/index.ts
+import {
+  EdgeController,
+  RouteHandler,
+  Task,
+  json,
+  parseJSON,
+  badRequest,
+  notFound,
+} from 'edge-master';
+
+const app = new EdgeController();
+
+// In-memory storage
+const users = new Map([
+  ['1', { id: '1', name: 'Alice', email: 'alice@example.com' }],
+  ['2', { id: '2', name: 'Bob', email: 'bob@example.com' }],
+]);
+
+// List all users
+app.GET('/api/users', new RouteHandler(new Task({
+  do: async () => json({ users: Array.from(users.values()) })
+})));
+
+// Get user by ID
+app.GET('/api/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const user = users.get(id || '');
+
+    if (!user) {
+      return notFound(`User ${id} not found`);
+    }
+
+    return json({ user });
+  }
+})));
+
+// Create user
+app.POST('/api/users', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    if (!body.name || !body.email) {
+      return badRequest('Name and email are required');
+    }
+
+    const user = {
+      id: (users.size + 1).toString(),
+      name: body.name,
+      email: body.email,
+    };
+
+    users.set(user.id, user);
+    return json({ user }, { status: 201 });
+  }
+})));
+
+// Update user
+app.PUT('/api/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+    const body = await parseJSON(req);
+
+    if (!users.has(id || '')) {
+      return notFound(`User ${id} not found`);
+    }
+
+    const user = { id, ...body };
+    users.set(id!, user);
+
+    return json({ user });
+  }
+})));
+
+// Delete user
+app.DELETE('/api/users/:id', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const id = new URL(req.url).pathname.split('/').pop();
+
+    if (!users.has(id || '')) {
+      return notFound(`User ${id} not found`);
+    }
+
+    users.delete(id!);
+    return json({ message: 'User deleted' });
+  }
+})));
+
+export default {
+  fetch: (req: Request) => app.handleRequest({ req })
+};
+```
+
+#### Step 3: Test Locally
+
+```bash
+npx wrangler dev
+
+# Test with curl
+curl http://localhost:8787/api/users
+curl http://localhost:8787/api/users/1
+curl -X POST http://localhost:8787/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Charlie","email":"charlie@example.com"}'
+```
+
+**What you learned:** Routes, handlers, tasks, request parsing, error responses
+
+---
+
+### Tutorial 2: Add JWT Authentication
+
+**Time: 20 minutes** | **Level: Intermediate**
+
+Protect your API with JWT authentication.
+
+#### Step 1: Install JWT Library
+
+```bash
+npm install @tsndr/cloudflare-worker-jwt
+```
+
+#### Step 2: Add Authentication
+
+```typescript
+import { jwtInterceptor } from 'edge-master';
+import { sign, verify } from '@tsndr/cloudflare-worker-jwt';
+
+const JWT_SECRET = 'your-secret-key';
+
+// Login endpoint (no auth required)
+app.POST('/api/login', new RouteHandler(new Task({
+  do: async ({ req }) => {
+    const { username, password } = await parseJSON(req);
+
+    // Verify credentials (simplified)
+    if (username === 'admin' && password === 'password') {
+      const token = await sign(
+        { sub: 'admin', role: 'admin' },
+        JWT_SECRET
+      );
+
+      return json({ token });
+    }
+
+    return unauthorized('Invalid credentials');
+  }
+})));
+
+// Protect all /api routes except /api/login
+app.addInterceptor(jwtInterceptor({
+  secret: JWT_SECRET,
+  exclude: ['/api/login'],
+  verify: async (token, secret) => {
+    return await verify(token, secret);
+  }
+}));
+
+// Protected route
+app.GET('/api/me', new RouteHandler(new Task({
+  do: async (ctx) => {
+    const user = getState(ctx, 'user'); // Set by JWT interceptor
+    return json({ user });
+  }
+})));
+```
+
+#### Step 3: Test Authentication
+
+```bash
+# Login
+TOKEN=$(curl -X POST http://localhost:8787/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"password"}' \
+  | jq -r '.token')
+
+# Access protected route
+curl http://localhost:8787/api/me \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**What you learned:** JWT authentication, interceptors, context state, route protection
+
+---
+
+### Tutorial 3: Implement Caching
+
+**Time: 15 minutes** | **Level: Intermediate**
+
+Add intelligent caching to improve performance.
+
+#### Step 1: Add Cache Interceptors
+
+```typescript
+import { cacheInterceptor } from 'edge-master';
+
+// Check cache before route handling
+const { check, store } = cacheInterceptor({
+  ttl: 3600, // 1 hour
+  cacheKey: (req) => new URL(req.url).pathname,
+  shouldCache: (req) => req.method === 'GET'
+});
+
+app.addInterceptor(check);  // Check cache first
+app.addInterceptor(store);  // Store response in cache
+```
+
+#### Step 2: Test Caching
+
+```bash
+# First request (slow)
+time curl http://localhost:8787/api/users
+
+# Second request (fast, from cache)
+time curl http://localhost:8787/api/users
+```
+
+**What you learned:** Caching strategies, cache interceptors, performance optimization
+
+---
+
+### Tutorial 4: Add Rate Limiting
+
+**Time: 15 minutes** | **Level: Intermediate**
+
+Protect your API from abuse with rate limiting.
+
+#### Step 1: Add Rate Limiter
+
+```typescript
+import { rateLimitInterceptor } from 'edge-master';
+
+app.addInterceptor(rateLimitInterceptor({
+  limit: 10,          // 10 requests
+  window: 60,         // per 60 seconds
+  keyGenerator: (req) => {
+    // Rate limit by IP
+    return req.headers.get('cf-connecting-ip') || 'unknown';
+  }
+}));
+```
+
+#### Step 2: Test Rate Limiting
+
+```bash
+# Make multiple requests
+for i in {1..15}; do
+  curl http://localhost:8787/api/users
+  echo "Request $i"
+done
+```
+
+**What you learned:** Rate limiting, request interceptors, short-circuiting
+
+---
+
+### Tutorial 5: Error Handling & Logging
+
+**Time: 20 minutes** | **Level: Intermediate**
+
+Implement robust error handling and request logging.
+
+#### Step 1: Add Error Handlers
+
+```typescript
+import { loggingInterceptor } from 'edge-master';
+
+// Add logging
+const { request, response } = loggingInterceptor({
+  level: 'info',
+  logTiming: true,
+  logger: (message) => console.log(JSON.stringify(message))
+});
+
+app.addInterceptor(request);
+app.addInterceptor(response);
+
+// Custom error handler
+app.onError(async (error, ctx) => {
+  console.error('Error:', {
+    message: error.message,
+    stack: error.stack,
+    url: ctx.reqCtx.req.url,
+    method: ctx.reqCtx.req.method,
+  });
+
+  return json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? error.message : 'An error occurred'
+  }, { status: 500 });
+});
+
+// Custom 404 handler
+app.onNotFound(async ({ req }) => {
+  const url = new URL(req.url);
+
+  return json({
+    error: 'Not Found',
+    path: url.pathname,
+    message: `The endpoint ${url.pathname} does not exist`
+  }, { status: 404 });
+});
+```
+
+**What you learned:** Error handling, logging, custom error responses
+
+---
+
+## Advanced Tutorials
+
+### Tutorial 6: Multi-Task Routes
+
+**Time: 25 minutes** | **Level: Advanced**
+
+Build complex routes with multiple tasks.
+
+```typescript
+// Validation task
+const validateTask = new Task({
+  do: async ({ req }) => {
+    const body = await parseJSON(req);
+
+    if (!body.email || !body.email.includes('@')) {
+      return badRequest('Valid email is required');
+    }
+
+    if (!body.password || body.password.length < 8) {
+      return badRequest('Password must be at least 8 characters');
+    }
+
+    // Store validated data in context
+    setState(req, 'validatedData', body);
+
+    return undefined; // Continue to next task
+  }
+});
+
+// Processing task
+const processTask = new Task({
+  do: async (ctx) => {
+    const data = getState(ctx, 'validatedData');
+
+    // Process the data
+    const result = await processUser(data);
+
+    setState(ctx, 'result', result);
+    return undefined; // Continue to next task
+  }
+});
+
+// Response task
+const responseTask = new Task({
+  do: async (ctx) => {
+    const result = getState(ctx, 'result');
+    return json({ result }, { status: 201 });
+  }
+});
+
+// Combine tasks
+app.POST('/api/register', new RouteHandler(
+  validateTask,
+  processTask,
+  responseTask
+));
+```
+
+**What you learned:** Task composition, context state, complex workflows
+
+---
+
+### Tutorial 7: Workers KV Integration
+
+**Time: 30 minutes** | **Level: Advanced**
+
+Use Workers KV for persistent storage.
+
+#### Step 1: Setup KV
+
+```bash
+npx wrangler kv:namespace create "MY_KV"
+# Add binding to wrangler.toml
+```
+
+#### Step 2: Use KV in Routes
+
+```typescript
+app.GET('/api/cache/:key', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const url = new URL(req.url);
+    const key = url.pathname.split('/').pop();
+
+    const value = await env.MY_KV.get(key);
+
+    if (!value) {
+      return notFound('Key not found');
+    }
+
+    return json({ key, value });
+  }
+})));
+
+app.POST('/api/cache/:key', new RouteHandler(new Task({
+  do: async ({ req, env }) => {
+    const url = new URL(req.url);
+    const key = url.pathname.split('/').pop();
+    const { value, ttl } = await parseJSON(req);
+
+    await env.MY_KV.put(key, value, {
+      expirationTtl: ttl || 3600
+    });
+
+    return json({ success: true });
+  }
+})));
+```
+
+**What you learned:** Workers KV, environment bindings, persistent storage
+
+---
+
+### Tutorial 8: Route Groups & Organization
+
+**Time: 20 minutes** | **Level: Intermediate**
+
+Organize large applications with route groups.
+
+```typescript
+// API v1
+app.group('/api/v1', (v1) => {
+  v1.GET('/users', listUsersV1);
+  v1.POST('/users', createUserV1);
+});
+
+// API v2 with auth
+app.group('/api/v2', (v2) => {
+  // Add auth for v2 only
+  v2.addInterceptor(jwtInterceptor({ secret: JWT_SECRET }));
+
+  v2.GET('/users', listUsersV2);
+  v2.POST('/users', createUserV2);
+
+  // Nested groups
+  v2.group('/admin', (admin) => {
+    admin.GET('/stats', getStats);
+    admin.POST('/users/ban', banUser);
+  });
+});
+```
+
+**What you learned:** Route grouping, nested groups, scoped interceptors
+
+---
+
+## Complete Examples
+
+For full, production-ready examples, check out our GitHub repository:
+
+### 🚀 [01. API Gateway](https://github.com/sharif3271/edge-master/tree/main/example/01-api-gateway)
+Complete REST API with CRUD operations, validation, and error handling
+
+### 🔐 [02. Authentication](https://github.com/sharif3271/edge-master/tree/main/example/02-authentication)
+JWT authentication with login, signup, and protected routes
+
+### ⚡ [03. Caching](https://github.com/sharif3271/edge-master/tree/main/example/03-caching)
+Advanced caching strategies with Cloudflare Cache API
+
+### 🔀 [04. Microservices Proxy](https://github.com/sharif3271/edge-master/tree/main/example/04-microservices-proxy)
+API gateway that routes to multiple backend services
+
+### 🛡️ [05. Security](https://github.com/sharif3271/edge-master/tree/main/example/05-security)
+Rate limiting, API keys, and security headers
+
+### 🧪 [06. A/B Testing](https://github.com/sharif3271/edge-master/tree/main/example/06-ab-testing)
+Feature flags and A/B testing implementation
+
+### 🖼️ [07. Image Optimization](https://github.com/sharif3271/edge-master/tree/main/example/07-image-optimization)
+On-the-fly image transformation and optimization
+
+### 💾 [08. Workers KV](https://github.com/sharif3271/edge-master/tree/main/example/08-workers-kv)
+Key-value storage integration
+
+### 🤖 [09. Workers AI](https://github.com/sharif3271/edge-master/tree/main/example/09-workers-ai)
+AI model integration on the edge
+
+### 🔗 [10. RPC Bindings](https://github.com/sharif3271/edge-master/tree/main/example/10-rpc-bindings)
+Inter-worker communication
+
+---
+
+## Tutorial Challenges
+
+Test your EdgeMaster skills:
+
+### 🎯 Challenge 1: Build a URL Shortener
+- Accept long URLs and generate short codes
+- Store mappings in KV
+- Redirect short URLs to long URLs
+- Track click analytics
+
+### 🎯 Challenge 2: Create a Multi-Tenant API
+- Support multiple tenants with API keys
+- Isolate data per tenant
+- Rate limit per tenant
+- Tenant-specific configuration
+
+### 🎯 Challenge 3: Build a GraphQL Gateway
+- Accept GraphQL queries
+- Route to multiple REST backends
+- Aggregate responses
+- Implement caching
+
+---
+
+## Next Steps
+
+- **Need API details?** [API Reference →](/docs/API-Reference)
+- **Building for production?** [Best Practices →](/docs/Best-Practices)
+- **Optimizing performance?** [Performance Guide →](/docs/Performance-Optimization)
+- **Having issues?** [Troubleshooting →](/docs/Troubleshooting)
+
+---
+
+**Keep building!** Practice makes perfect. 🚀

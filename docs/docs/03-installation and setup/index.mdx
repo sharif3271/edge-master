@@ -1,0 +1,589 @@
+---
+title: Installation & Setup
+description: Install and configure EdgeMaster for your edge computing platform
+---
+
+# Installation & Setup
+
+This guide walks you through installing EdgeMaster and setting up your development environment for various edge computing platforms.
+
+---
+
+## Prerequisites
+
+Before installing EdgeMaster, ensure you have the following:
+
+### Required
+
+- **Node.js** 16.0.0 or higher
+- **npm** 7+ or **yarn** 1.22+ or **pnpm** 8+
+- **TypeScript** 5.0+ (recommended)
+- Basic understanding of TypeScript/JavaScript and async/await
+
+### Platform-Specific
+
+Depending on your target platform, you'll also need:
+
+**Cloudflare Workers:**
+- Cloudflare account (free tier available)
+- Wrangler CLI
+
+**AWS Lambda@Edge:**
+- AWS account
+- AWS CLI configured
+- Serverless Framework or SAM CLI
+
+**Azure Functions:**
+- Azure account
+- Azure Functions Core Tools
+
+**Node.js (for testing):**
+- Node.js 16+ runtime
+
+---
+
+## Installation
+
+### Install via npm
+
+Install EdgeMaster as a dependency in your project:
+
+```bash
+npm install edge-master
+```
+
+Or using yarn:
+
+```bash
+yarn add edge-master
+```
+
+Or using pnpm:
+
+```bash
+pnpm add edge-master
+```
+
+### Install TypeScript Dependencies
+
+For TypeScript projects (recommended):
+
+```bash
+npm install -D typescript @types/node
+```
+
+### Install Platform-Specific Tools
+
+#### Cloudflare Workers
+
+```bash
+npm install -D wrangler @cloudflare/workers-types
+```
+
+#### AWS Lambda@Edge
+
+```bash
+npm install -D @types/aws-lambda serverless
+```
+
+#### Azure Functions
+
+```bash
+npm install -D @azure/functions
+```
+
+---
+
+## Quick Start
+
+### 1. Initialize Your Project
+
+Create a new directory and initialize a Node.js project:
+
+```bash
+mkdir my-edge-app
+cd my-edge-app
+npm init -y
+```
+
+### 2. Install EdgeMaster
+
+```bash
+npm install edge-master
+npm install -D typescript @cloudflare/workers-types wrangler
+```
+
+### 3. Initialize TypeScript
+
+Create a `tsconfig.json` file:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ES2022",
+    "lib": ["ES2021"],
+    "types": ["@cloudflare/workers-types"],
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
+```
+
+### 4. Create Your First Application
+
+Create `src/index.ts`:
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+// Initialize the controller
+const app = new EdgeController();
+
+// Add a route
+app.GET('/hello', new RouteHandler(new Task({
+  do: async () => json({ message: 'Hello from EdgeMaster!' })
+})));
+
+// Export for your platform
+export default {
+  fetch: (request: Request) => app.handleRequest({ req: request })
+};
+```
+
+### 5. Configure Your Platform
+
+#### Cloudflare Workers
+
+Create `wrangler.toml`:
+
+```toml
+name = "my-edge-app"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[build]
+command = "npm run build"
+```
+
+#### AWS Lambda@Edge
+
+Create `serverless.yml`:
+
+```yaml
+service: my-edge-app
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+
+functions:
+  edge:
+    handler: dist/index.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+```
+
+### 6. Run Locally
+
+#### Cloudflare Workers
+
+```bash
+npx wrangler dev
+```
+
+Visit `http://localhost:8787/hello`
+
+#### Node.js (for testing)
+
+Create a simple server in `server.js`:
+
+```javascript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+const app = new EdgeController();
+
+app.GET('/hello', new RouteHandler(new Task({
+  do: async () => json({ message: 'Hello!' })
+})));
+
+const server = Bun.serve({
+  port: 3000,
+  fetch: (req) => app.handleRequest({ req })
+});
+
+console.log(`Server running at http://localhost:${server.port}`);
+```
+
+---
+
+## Project Structure
+
+A typical EdgeMaster project structure:
+
+```
+my-edge-app/
+├── src/
+│   ├── index.ts              # Main entry point
+│   ├── routes/               # Route definitions
+│   │   ├── users.ts
+│   │   └── posts.ts
+│   ├── handlers/             # Route handlers
+│   │   ├── userHandlers.ts
+│   │   └── postHandlers.ts
+│   ├── interceptors/         # Custom interceptors
+│   │   └── auth.ts
+│   ├── tasks/                # Reusable tasks
+│   │   └── validation.ts
+│   └── types/                # TypeScript types
+│       └── index.ts
+├── test/                     # Test files
+│   └── index.test.ts
+├── dist/                     # Compiled output
+├── node_modules/
+├── wrangler.toml            # Cloudflare config
+├── tsconfig.json            # TypeScript config
+├── package.json
+└── README.md
+```
+
+---
+
+## Configuration
+
+### TypeScript Configuration
+
+EdgeMaster is written in TypeScript and provides full type definitions. Configure your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ES2022",
+    "lib": ["ES2021"],
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true
+  }
+}
+```
+
+### Package.json Scripts
+
+Add helpful scripts to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc",
+    "deploy": "wrangler deploy",
+    "test": "jest",
+    "type-check": "tsc --noEmit"
+  }
+}
+```
+
+---
+
+## Platform-Specific Setup
+
+Choose your deployment platform:
+
+### 🔷 Cloudflare Workers
+
+[Complete Cloudflare Setup Guide →](/docs/installation%20and%20setup/cloudflare)
+
+Cloudflare Workers is the **recommended platform** for EdgeMaster. It offers:
+- Global edge network
+- Zero cold starts
+- Generous free tier
+- Built-in KV storage, D1 database, R2 storage
+- Workers AI integration
+
+### ⚡ AWS Lambda@Edge
+
+**Setup:**
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+const app = new EdgeController();
+
+app.GET('/api/hello', new RouteHandler(new Task({
+  do: async () => json({ message: 'Hello from Lambda@Edge!' })
+})));
+
+// Lambda@Edge handler
+export const handler = async (event: any) => {
+  const request = new Request(event.Records[0].cf.request.uri, {
+    method: event.Records[0].cf.request.method,
+    headers: new Headers(event.Records[0].cf.request.headers)
+  });
+
+  return app.handleRequest({ req: request });
+};
+```
+
+### ☁️ Azure Functions
+
+**Setup:**
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+import { app as azureApp } from '@azure/functions';
+
+const edgeApp = new EdgeController();
+
+edgeApp.GET('/api/hello', new RouteHandler(new Task({
+  do: async () => json({ message: 'Hello from Azure!' })
+})));
+
+azureApp.http('httpTrigger', {
+  methods: ['GET', 'POST'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    return edgeApp.handleRequest({ req: request });
+  }
+});
+```
+
+### 🟢 Node.js / Bun
+
+For local development or Node.js deployment:
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+const app = new EdgeController();
+
+app.GET('/hello', new RouteHandler(new Task({
+  do: async () => json({ message: 'Hello!' })
+})));
+
+// Node.js with Express
+import express from 'express';
+const server = express();
+server.all('*', async (req, res) => {
+  const request = new Request(`http://localhost${req.url}`, {
+    method: req.method,
+    headers: req.headers as any
+  });
+
+  const response = await app.handleRequest({ req: request });
+  res.status(response.status).send(await response.text());
+});
+
+server.listen(3000);
+```
+
+---
+
+## Verification
+
+### Test Your Installation
+
+Create a test file `test/verify.test.ts`:
+
+```typescript
+import { EdgeController, RouteHandler, Task, json } from 'edge-master';
+
+describe('EdgeMaster Installation', () => {
+  it('should create a basic route', async () => {
+    const app = new EdgeController();
+
+    app.GET('/test', new RouteHandler(new Task({
+      do: async () => json({ success: true })
+    })));
+
+    const request = new Request('http://localhost/test');
+    const response = await app.handleRequest({ req: request });
+    const data = await response.json();
+
+    expect(data).toEqual({ success: true });
+    expect(response.status).toBe(200);
+  });
+});
+```
+
+Run the test:
+
+```bash
+npm test
+```
+
+### Check TypeScript Types
+
+Verify type definitions are working:
+
+```typescript
+import { EdgeController } from 'edge-master';
+
+const app: EdgeController = new EdgeController();
+// Your IDE should provide full autocomplete and type checking
+```
+
+---
+
+## Environment Variables
+
+### Local Development
+
+Create `.dev.vars` (Cloudflare) or `.env`:
+
+```bash
+# API Keys
+API_KEY=your-api-key-here
+JWT_SECRET=your-jwt-secret-here
+
+# Database
+DATABASE_URL=your-database-url
+
+# External Services
+STRIPE_SECRET_KEY=sk_test_...
+```
+
+### Production
+
+#### Cloudflare Workers
+
+```bash
+# Set secrets via Wrangler
+npx wrangler secret put API_KEY
+npx wrangler secret put JWT_SECRET
+```
+
+#### AWS Lambda
+
+Use AWS Secrets Manager or environment variables in `serverless.yml`:
+
+```yaml
+provider:
+  environment:
+    API_KEY: ${env:API_KEY}
+    JWT_SECRET: ${env:JWT_SECRET}
+```
+
+### Access Environment Variables
+
+```typescript
+export default {
+  fetch: (request: Request, env: any) => {
+    // Access environment variables
+    const apiKey = env.API_KEY;
+    const jwtSecret = env.JWT_SECRET;
+
+    return app.handleRequest({ req: request, env });
+  }
+};
+```
+
+---
+
+## Common Issues & Solutions
+
+### Issue: "Cannot find module 'edge-master'"
+
+**Solution:** Ensure EdgeMaster is installed:
+
+```bash
+npm install edge-master
+```
+
+Check `node_modules/edge-master` exists.
+
+### Issue: TypeScript errors with Worker types
+
+**Solution:** Install Cloudflare Workers types:
+
+```bash
+npm install -D @cloudflare/workers-types
+```
+
+Add to `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"]
+  }
+}
+```
+
+### Issue: "Cannot use import outside a module"
+
+**Solution:** Set module type in `package.json`:
+
+```json
+{
+  "type": "module"
+}
+```
+
+Or use `.mjs` extension for files.
+
+### Issue: Wrangler dev not working
+
+**Solution:** Ensure `wrangler.toml` is configured correctly:
+
+```toml
+name = "my-app"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+```
+
+---
+
+## Next Steps
+
+Now that EdgeMaster is installed, explore the features:
+
+### 📖 Learn the Fundamentals
+- [**Getting Started Tutorial**](/docs/getting-started) - Build your first app
+- [**Core Concepts**](/docs/Concepts/CoreConcepts) - Understand the architecture
+- [**Architecture Overview**](/docs/Concepts/Architecture) - Deep dive into design
+
+### 🔧 Platform-Specific Guides
+- [**Cloudflare Workers Setup**](/docs/installation%20and%20setup/cloudflare) - Recommended platform
+- **AWS Lambda@Edge** - Coming soon
+- **Azure Functions** - Coming soon
+
+### 💡 Explore Features
+- [**API Reference**](/docs/API-Reference) - Complete API documentation
+- [**Best Practices**](/docs/Best-Practices) - Production-ready patterns
+- [**Examples**](/docs/Examples) - Real-world examples
+
+### 🚀 Build Something
+- [**Tutorials**](/docs/Tutorials) - Step-by-step guides
+- [**GitHub Examples**](https://github.com/sharif3271/edge-master/tree/main/example) - 10 complete examples
+
+---
+
+## Getting Help
+
+Need assistance?
+
+- 📚 [Documentation](/docs/Intro)
+- 🐛 [Report Issues](https://github.com/sharif3271/edge-master/issues)
+- 💬 [Discussions](https://github.com/sharif3271/edge-master/discussions)
+- 📧 [Email Support](mailto:sharif3271@gmail.com)
+
+---
+
+**Ready to build?** Continue with the [Getting Started Guide →](/docs/getting-started)
